@@ -945,12 +945,6 @@ def assign_candidates_notification(recruiter_email, new_recruiter_name, candidat
                 background-color: #4CAF50;
                 color: white;
             }}
-            # th.job-id-column {{
-            #     width: 120px; /* Increase the width for the Job ID column */
-            # }}
-             th.clientName-column {{
-                width: 100px; /* Increase the width for the Job ID column */
-            }}
             tr:nth-child(even) {{
                 background-color: #f9f9f9;
             }}
@@ -977,8 +971,8 @@ def assign_candidates_notification(recruiter_email, new_recruiter_name, candidat
             <p> Please find the details below:</p>
             <table>
                 <tr>
-                    <th class="job-id-column">Job ID</th>
-                    <th class="clientName-column">Client Name</th>
+                    <th>Job ID</th>
+                    <th>Client Name</th>
                     <th>Role/Profile</th>
                     <th>Candidate Name</th>
                     <th>Previous Recruiter</th>
@@ -993,7 +987,7 @@ def assign_candidates_notification(recruiter_email, new_recruiter_name, candidat
     </html>
     """
 
-    msg = Message(
+        msg = Message(
         # 'Candidate Assignment Notification',
         f'Candidate Data Transferred',
         sender='saiganeshkanuparthi@gmail.com',
@@ -1001,6 +995,107 @@ def assign_candidates_notification(recruiter_email, new_recruiter_name, candidat
     )
     msg.html = html_body
     mail.send(msg)
+
+# def assign_candidates_notification(recruiter_email, new_recruiter_name, candidates_data):
+#     html_body = f"""
+#     <html>
+#     <head>
+#         <style>
+#             body {{
+#                 font-family: Arial, sans-serif;
+#                 color: #333;
+#                 line-height: 1.6;
+#                 background-color: #f4f4f4;
+#                 margin: 0;
+#                 padding: 0;
+#             }}
+#             .container {{
+#                 padding: 20px;
+#                 margin: 20px auto;
+#                 max-width: 600px;
+#                 background-color: #ffffff;
+#                 border: 1px solid #ddd;
+#                 border-radius: 8px;
+#                 box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+#             }}
+#             .header {{
+#                 background-color: #4CAF50;
+#                 color: white;
+#                 padding: 10px;
+#                 text-align: center;
+#                 font-size: 20px;
+#                 border-radius: 8px 8px 0 0;
+#             }}
+#             table {{
+#                 border-collapse: collapse;
+#                 width: 100%;
+#                 margin-top: 10px;
+#             }}
+#             th, td {{
+#                 border: 1px solid #ddd;
+#                 padding: 8px;
+#                 text-align: left;
+#             }}
+#             th {{
+#                 background-color: #4CAF50;
+#                 color: white;
+#             }}
+            # # th.job-id-column {{
+            # #     width: 120px; /* Increase the width for the Job ID column */
+            # # }}
+            #  th.clientName-column {{
+            #     width: 100px; /* Increase the width for the Job ID column */
+            # }}
+#             tr:nth-child(even) {{
+#                 background-color: #f9f9f9;
+#             }}
+#             p {{
+#                 margin: 10px 0;
+#             }}
+#             .footer {{
+#                 margin-top: 20px;
+#                 font-size: 12px;
+#                 color: #777;
+#                 text-align: center;
+#                 border-top: 1px solid #ddd;
+#                 padding-top: 10px;
+#             }}
+#         </style>
+#     </head>
+    # <body>
+    #     <div class="container">
+    #         <div class="header">
+    #             Candidate Assignment Notification
+    #         </div>
+    #         <p>Hi {new_recruiter_name},</p>
+    #         <p>Candidate data has been transferred to your ATS account.</p>
+    #         <p> Please find the details below:</p>
+    #         <table>
+    #             <tr>
+    #                 <th class="job-id-column">Job ID</th>
+    #                 <th class="clientName-column">Client Name</th>
+    #                 <th>Role/Profile</th>
+    #                 <th>Candidate Name</th>
+    #                 <th>Previous Recruiter</th>
+    #             </tr>
+    #             {candidates_data}
+    #         </table>
+    #         <p>Please check <b>ATS Dashboard</b> page for more details.</p>
+    #         <p>Best Regards,</p>
+    #         <p><b>Makonis Talent Track Pro Team</b></p>
+    #     </div>
+    # </body>
+#     </html>
+#     """
+
+    # msg = Message(
+    #     # 'Candidate Assignment Notification',
+    #     f'Candidate Data Transferred',
+    #     sender='saiganeshkanuparthi@gmail.com',
+    #     recipients=[recruiter_email]
+    # )
+    # msg.html = html_body
+    # mail.send(msg)
 
 
 # def assign_candidates_notification(recruiter_email, new_recruiter_name, candidates_data):
