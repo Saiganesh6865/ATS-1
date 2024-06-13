@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, session
+from flask import Flask, render_template, request, redirect, url_for, session, render_template_string, escape  
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.utils import secure_filename
 import os
@@ -37,16 +37,23 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
 import pytz 
+from sqlalchemy import case, desc
+from sqlalchemy.orm import aliased
+import hashlib
+import random
+import string
 
 app = Flask(__name__)
 cors = CORS(app)
-# app.config['MAIL_SERVER'] = 'smtp.gmail.com'
-app.config['MAIL_SERVER'] = 'smtp.office365.com'
+app.config['MAIL_SERVER'] = 'smtp.gmail.com'
+# app.config['MAIL_SERVER'] = 'smtp.office365.com'
 app.config['MAIL_PORT'] = 587
 app.config['MAIL_USE_TLS'] = True
-app.config['MAIL_USERNAME'] = 'ganesh.s@makonissoft.com'
-app.config['MAIL_PASSWORD'] = 'Fol98135'
-# app.config['MAIL_PASSWORD'] = 'tozvnmxbcejynxpe'
+# app.config['MAIL_USERNAME'] = 'ganesh.s@makonissoft.com'
+# app.config['MAIL_PASSWORD'] = 'Fol98135'
+app.config['MAIL_USERNAME'] = 'saiganeshkanuparthi@gmail.com'
+# app.config['MAIL_PASSWORD'] = 'Ganesh@2022'
+app.config['MAIL_PASSWORD'] = 'ungeazzlutbzkwaa'
 mail = Mail(app)
 
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get("DATABASE_URL")
@@ -58,7 +65,7 @@ app.config['SECRET_KEY'] = secrets.token_hex(16)
 # Specify the folder where uploaded resumes will be stored
 UPLOAD_FOLDER = 'C:/Users/Makonis/PycharmProjects/login/'
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-cors = CORS(app)
+# cors = CORS(app)
 # Specify the allowed resume file extensions
 ALLOWED_EXTENSIONS = {'pdf', 'doc', 'docx'}
 db = SQLAlchemy(app)
@@ -84,7 +91,7 @@ class User(db.Model):
     __tablename__ = 'users'
     id = db.Column(db.Integer, primary_key=True, autoincrement=True,nullable=False)
     username = db.Column(db.String(50), unique=True, nullable=False)
-    password = db.Column(db.String(100), nullable=False)
+    password = db.Column(db.String(50), nullable=False)
     name = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(100), nullable=False)
     user_type = db.Column(db.String(20), nullable=False)
@@ -161,6 +168,7 @@ class Candidate(db.Model):
     comments = db.Column(db.String(1000))
     linkedin_url = db.Column(db.String(1000))
     user_id = db.Column(db.Integer, ForeignKey('users.id'))
+    serving_notice_period = db.Column(db.String(200))
     period_of_notice = db.Column(db.String(1000))
     user = relationship("User", back_populates="candidate")
     reference = db.Column(db.String(200))
@@ -169,7 +177,8 @@ class Candidate(db.Model):
     reference_information = db.Column(db.String(200))
     data_updated_date = db.Column(db.Date)
     data_updated_time = db.Column(db.Time)
-
+    resume_present = db.Column(db.Boolean, default=False)
+    # resume_present = db.Column(db.Boolean, default=True)
     def serialize(self):
         return {
             'id': self.id,
@@ -258,7 +267,8 @@ class JobPost(db.Model):
     notice_period = db.Column(db.String(100))
     role = db.Column(db.String(100))
     detailed_jd = db.Column(db.Text)
-    jd_pdf =  db.Column(db.String(1000))
+    # jd_pdf =  db.Column(db.String(1000))
+    jd_pdf =  db.Column(db.LargeBinary)
     mode = db.Column(db.String(100))
     recruiter = db.Column(db.String(1000))
     management = db.Column(db.String(100))
@@ -266,13 +276,15 @@ class JobPost(db.Model):
     time_created = db.Column(db.Time)
     job_status = db.Column(db.String(20))
     job_type = db.Column(db.String(100))
+    contract_in_months = db.Column(db.String(100))
+    # contract_in_months = db.Column(db.Integer, nullable=True)
     skills = db.Column(db.String(500))
     notification = db.Column(db.String(20))
     data_updated_date = db.Column(db.Date)
     data_updated_time = db.Column(db.Time)
-
-    def __init__(self, client, experience_min, experience_max, budget_min, budget_max, location, shift_timings,
-                 notice_period, role, detailed_jd,jd_pdf, mode, recruiter, management,job_status,job_type,skills):
+    jd_pdf_present = db.Column(db.Boolean, default=False)
+    # jd_pdf_present = db.Column(db.Boolean, default=True)
+    def __init__(self, client, experience_min, experience_max, budget_min, budget_max, location, shift_timings, notice_period, role, detailed_jd, mode, recruiter, management, job_status, job_type, skills, jd_pdf, jd_pdf_present,contract_in_months):
         self.client = client
         self.experience_min = experience_min
         self.experience_max = experience_max
@@ -283,13 +295,15 @@ class JobPost(db.Model):
         self.notice_period = notice_period
         self.role = role
         self.detailed_jd = detailed_jd
-        self.jd_pdf = jd_pdf
         self.mode = mode
         self.recruiter = recruiter
         self.management = management
         self.job_status = job_status
         self.job_type = job_type
         self.skills = skills
+        self.jd_pdf = jd_pdf
+        self.contract_in_months = contract_in_months
+        self.jd_pdf_present = jd_pdf_present
 
 class Deletedcandidate(db.Model):
     _tablename_ = 'deletedcandidate'
@@ -322,46 +336,91 @@ class Notification(db.Model):
         self.notification_status = notification_status
         self.num_notification = 0  # Default value for num_notification
 
+
 @app.route('/check_candidate', methods=['POST'])
 def check_candidate():
+    data = request.json
     clients = []
     profiles = []
-    dates=[]
-    job_ids=[]
-    status=[]
-    field = request.json['field']
-    value = request.json['value']
+    dates = []
+    job_ids = []
+    status = []
+
+    email = data.get('email')
+    mobile = data.get('mobile')
 
     # Query the database to check for an existing candidate with the provided mobile or email
-    existing_candidate = Candidate.query.filter(or_(Candidate.mobile == value, Candidate.email == value)).all()
-    for i in existing_candidate:
-        clients.append(" " + i.client + " ")
-        profiles.append(" " + i.profile + " " )
-        dates.append(i.date_created.strftime('%Y-%m-%d'))
-        job_ids.append(i.job_id)
-        status.append(i.status)
+    existing_candidates = Candidate.query.filter(or_(Candidate.mobile == mobile, Candidate.email == email)).all()
+    
+    for candidate in existing_candidates:
+        clients.append(candidate.client)
+        profiles.append(candidate.profile)
+        dates.append(candidate.date_created.strftime('%Y-%m-%d'))
+        job_ids.append(candidate.job_id)
+        status.append(candidate.status)
 
-    # candidate = Candidate.query.filter_by(mobile=existing_candidate.mobile).first()
-    if existing_candidate:
+    if existing_candidates:
         response = {
-            'message' : f"Candidate with this {field} already exists.",
-            'client' : clients,
-            'profile' : profiles,
-            'dates':dates,
-            'jobId':job_ids,
-            'status':status
+            'message': "Candidate with this mobile or email already exists.",
+            'clients': clients,
+            'profiles': profiles,
+            'dates': dates,
+            'jobIds': job_ids,
+            'status': status
         }
-
     else:
         response = {
-            'message': f"{field.capitalize()} is available.",
-            'client': None,
-            'profile': None,
-            'dates':None,
-            'jobId':None,
-            'status':None
+            'message': "Mobile and email not available.",
+            'clients': None,
+            'profiles': None,
+            'dates': None,
+            'jobIds': None,
+            'status': None
         }
-    return json.dumps(response)
+
+    return jsonify(response)
+
+
+# @app.route('/check_candidate', methods=['POST'])
+# def check_candidate():
+#     clients = []
+#     profiles = []
+#     dates=[]
+#     job_ids=[]
+#     status=[]
+#     field = request.json['field']
+#     value = request.json['value']
+
+#     # Query the database to check for an existing candidate with the provided mobile or email
+#     existing_candidate = Candidate.query.filter(or_(Candidate.mobile == value, Candidate.email == value)).all()
+#     for i in existing_candidate:
+#         clients.append(" " + i.client + " ")
+#         profiles.append(" " + i.profile + " " )
+#         dates.append(i.date_created.strftime('%Y-%m-%d'))
+#         job_ids.append(i.job_id)
+#         status.append(i.status)
+
+#     # candidate = Candidate.query.filter_by(mobile=existing_candidate.mobile).first()
+#     if existing_candidate:
+#         response = {
+#             'message' : f"Candidate with this {field} already exists.",
+#             'client' : clients,
+#             'profile' : profiles,
+#             'dates':dates,
+#             'jobId':job_ids,
+#             'status':status
+#         }
+
+#     else:
+#         response = {
+#             'message': f"{field.capitalize()} is available.",
+#             'client': None,
+#             'profile': None,
+#             'dates':None,
+#             'jobId':None,
+#             'status':None
+#         }
+#     return json.dumps(response)
 
 @app.route('/recruiter')
 def recruiter_index():
@@ -428,15 +487,67 @@ def reset_password():
                 msg.body = f'Hello {user.name},\n\nYour password has been successfully changed. Here are your updated credentials:\n\nUsername: {user.username}\nPassword: {new_password}'
                 mail.send(msg)
 
-                return jsonify({ 'message': 'Password changed successfully.'})
+                return jsonify({'status': 'success', 'message': 'Password changed successfully.'})
             else:
-                return jsonify({ 'message': 'New password is the same as the old password'})
+                return jsonify({'status': 'error', 'message': 'New password is the same as the old password'})
         else:
-            return jsonify({ 'message': 'Invalid OTP or password confirmation. Please try again.'})
+            return jsonify({'status': 'error', 'message': 'Invalid OTP or password confirmation. Please try again.'})
 
-    return jsonify({ 'message': 'Invalid request method.'})
+    return jsonify({'status': 'error', 'message': 'Invalid request method.'})
 
-    
+
+
+def generate_html_message(message, redirect_url=None):
+    html_message = f"""
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Message</title>
+            <!-- Add CSS styles for your message -->
+            <style>
+                /* Example CSS styles */
+                body {{
+                    font-family: Arial, sans-serif;
+                    background-color: #f4f4f4;
+                    text-align: center;
+                }}
+                .message {{
+                    margin-top: 50px;
+                    background-color: #fff;
+                    border-radius: 10px;
+                    padding: 20px;
+                    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+                    display: inline-block;
+                }}
+                .message p {{
+                    font-size: 20px;
+                }}
+                .button {{
+                    display: inline-block;
+                    padding: 10px 20px;
+                    background-color: #007bff;
+                    color: #fff;
+                    text-decoration: none;
+                    border-radius: 5px;
+                    transition: background-color 0.3s;
+                    margin-top: 20px;
+                }}
+                .button:hover {{
+                    background-color: #0056b3;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="message">
+                <p>{message}</p>
+                {'' if redirect_url is None else f'<a href="{redirect_url}" class="button">Login</a>'}
+            </div>
+        </body>
+        </html>
+    """
+    return html_message
 
 @app.route('/verify/<token>')
 def verify(token):
@@ -446,17 +557,32 @@ def verify(token):
         user.is_verified = True
         db.session.commit()
         if user.user_type == 'management':
-            return jsonify({'status': 'success', 'message': 'Account verified successfully!', 'redirect': url_for('management_login', verification_msg_manager='Your Account has been Successfully Verified. Please Login.')})
+            message = 'Your Account has been Successfully Verified. Please Login.'
+            return generate_html_message(message, redirect_url='https://ats-makonis.netlify.app/ManagementLogin')
         elif user.user_type == 'recruiter':
-            return jsonify({'status': 'success', 'message': 'Account verified successfully!', 'redirect': url_for('recruiter_index')})
+            message = 'Your Account has been Successfully Verified.'
+            return generate_html_message(message, redirect_url='https://ats-makonis.netlify.app/RecruitmentLogin')
     else:
-        return jsonify({'status': 'error', 'message': 'Your verification link has expired. Please contact management to activate your account.'})
-    return jsonify({'status': 'error', 'message': 'An error occurred while verifying your account.'})
+        message = 'Your verification link has expired. Please contact management to activate your account.'
+        return generate_html_message(message)
 
 
-import hashlib
-import random
-import string
+# @app.route('/verify/<token>')
+# def verify(token):
+#     user_id = verify_token(token)
+#     if user_id:
+#         user = User.query.get(user_id)
+#         user.is_verified = True
+#         db.session.commit()
+#         if user.user_type == 'management':
+#             return jsonify({'status': 'success', 'message': 'Account verified successfully!', 'redirect': url_for('management_login', verification_msg_manager='Your Account has been Successfully Verified. Please Login.')})
+#         elif user.user_type == 'recruiter':
+#             return jsonify({'status': 'success', 'message': 'Account verified successfully!', 'redirect': url_for('recruiter_index')})
+#     else:
+#         return jsonify({'status': 'error', 'message': 'Your verification link has expired. Please contact management to activate your account.'})
+#     return jsonify({'status': 'error', 'message': 'An error occurred while verifying your account.'})
+
+
 
 # Function to generate a random password
 def generate_random_password(length=8):
@@ -514,7 +640,7 @@ def signup():
         mail.send(msg)
 
         # return jsonify({'message': 'A verification email has been sent to your email address. Please check your inbox.'})
-        return jsonify({
+        return jsonify({'status': 'success',
             'message': 'A verification email has been sent to your email address. Please check your inbox.',
             'success_message': 'Account created successfully'
             })
@@ -557,7 +683,7 @@ def signup_onetime():
         message_body = f'Hello {new_user.name},\n\nWe are pleased to inform you that your account has been successfully created for the ATS Makonis Talent Track Pro.\n\nYour login credentials:\n\nUsername: {new_user.username}\nPassword: {password}\n\nTo complete the account setup, kindly click on the verification link below:\n{verification_link}\n\nPlease note that the verification link will expire after 24 hours.\n\nAfter successfully verifying your account, you can access the application using the following link:\n\nApplication Link (Post Verification): https://ats-makonis.netlify.app/\n\nIf you have any questions or need assistance, please feel free to reach out.\n\nBest regards,'
 
         # Send the verification email
-        msg = Message('Account Verification', sender='ganesh.s@makonissoft.com', recipients=[new_user.email])
+        msg = Message('Account Verification', sender='saiganeshkanuparthi@gmail.com', recipients=[new_user.email])
         msg.body = message_body
         mail.send(msg)
 
@@ -568,6 +694,52 @@ def signup_onetime():
             }),200
 
     return jsonify({'message': 'Invalid request method.'}),400
+
+# @app.route('/login/recruiter', methods=['POST'])
+# def recruiter_login():
+#     verification_msg = request.args.get('verification_msg')
+#     reset_message = request.args.get('reset_message')
+#     session_timeout_msg = request.args.get("session_timeout_msg")
+#     password_message = request.args.get('password_message')
+
+#     if request.method == 'POST':
+#         username = request.json.get('username')
+#         password = request.json.get('password')
+
+#         # Hash the entered password
+#         hashed_password = hashlib.sha256(password.encode()).hexdigest()
+
+#         # Check if the user exists and the password is correct
+#         user = User.query.filter_by(username=username, password=hashed_password, user_type='recruiter').first()
+
+#         if user:
+#             if user.is_active:  # Check if the user is active
+#                 if user.is_verified:
+#                     # Set the user session variables
+#                     session['user_id'] = user.id
+#                     session['user_type'] = user.user_type
+#                     session['username'] = user.username
+#                     session['user_name'] = user.name
+#                     session['JWT Token'] = secrets.token_hex(16)
+#                     return jsonify({'status': 'success', 'redirect': url_for('dashboard'),'user_id': user.id})
+#                 else:
+#                     error = 'Your account is not verified yet. Please check your email for the verification link.'
+#             else:
+#                 error = 'Your account is not active. Please contact the administrator.'
+#         else:
+#             error = 'Invalid username or password'
+
+#         return jsonify({'status': 'error', 'error': error})
+
+#     # For GET requests, return necessary data
+#     return jsonify({
+#         'status': 'success',
+#         'verification_msg': verification_msg,
+#         'reset_message': reset_message,
+#         'session_timeout_msg': session_timeout_msg,
+#         'password_message': password_message
+#     })
+
 
 @app.route('/login/recruiter', methods=['POST'])
 def recruiter_login():
@@ -601,7 +773,7 @@ def recruiter_login():
             else:
                 message = 'Your account is not active. Please contact the administrator.'
         else:
-            message = 'Invalid username or password'
+            message= 'Invalid username or password'
 
         return jsonify({'status': 'error', 'message': message})
 
@@ -672,31 +844,44 @@ def management_login():
 #     return jsonify(recruiters_list)
 
 
-@app.route('/get_recruiters', methods=['GET'])   
+@app.route('/get_recruiters', methods=['GET'])
 def get_recruiters_list():
     recruiters = User.query.filter_by(user_type='recruiter').all()
-    
+    management = User.query.filter_by(user_type='management').all()
+
     # Extracting only usernames
-    usernames = [recruiter.username for recruiter in recruiters]
-    
-    return jsonify(usernames)
+    recruiter_usernames = [recruiter.username for recruiter in recruiters]
+    management_usernames = [manager.username for manager in management]
+
+    return jsonify({
+        'recruiters': recruiter_usernames,
+        'management': management_usernames
+    })
+
 
 @app.route('/get_recruiters_candidate', methods=['POST'])
-def recruiter_candidate_list():
+def get_recruiters_candidate():
     data = request.json
     
     if not data or 'user_name' not in data:
-        return jsonify({'error': 'Invalid input'}), 400
+        return jsonify({'status': 'error', 'message': 'Invalid input'}), 400
     
     username = data['user_name']
     
-    # Find the recruiter with the given username
-    recruiter = User.query.filter_by(username=username, user_type='recruiter').first()
-    print("recruiter:",recruiter)
+    # Find the user with the given username who is either a recruiter or in management
+    user = User.query.filter((User.username == username) & (User.user_type.in_(['recruiter', 'management']))).first()
     
-    if recruiter:
-        # Find all candidates linked with the recruiter's username
-        candidates = Candidate.query.filter_by(recruiter=username).all()
+    if user:
+        # If the user is a recruiter, find all candidates linked with the user's username
+        if user.user_type == 'recruiter':
+            candidates = Candidate.query.filter_by(recruiter=username).all()
+        # If the user is in management, find all candidates where recruiter matches the username
+        elif user.user_type == 'management':
+            candidates = Candidate.query.filter(
+                (Candidate.recruiter == username) | (Candidate.management == username)
+            ).all()
+        else:
+            return jsonify({'status': 'error', 'message': 'User type not authorized'}), 403
         
         # Prepare response data
         candidates_list = [
@@ -705,39 +890,595 @@ def recruiter_candidate_list():
                 'username': candidate.name,
                 'status': candidate.status,
                 'profile': candidate.profile,
-                'recruiter': candidate.recruiter
+                'recruiter': candidate.recruiter,
+                'management': candidate.management
             } 
             for candidate in candidates
         ]
         return jsonify(candidates_list)
     else:
-        return jsonify({'error': 'Recruiter not found'}), 404
+        return jsonify({'status': 'error', 'message': 'User not found or not authorized'}), 404
 
-# @app.route('/get_recruiters_candidate', methods=['POST']) 
-# def recruiter_candidate_list():
+
+def assign_candidates_notification(recruiter_email, new_recruiter_name, candidates_data):
+    html_body = f"""
+    <html>
+    <head>
+        <style>
+            body {{
+                font-family: Arial, sans-serif;
+                color: #333;
+                line-height: 1.6;
+                background-color: #f4f4f4;
+                margin: 0;
+                padding: 0;
+            }}
+            .container {{
+                padding: 20px;
+                margin: 20px auto;
+                max-width: 600px;
+                background-color: #ffffff;
+                border: 1px solid #ddd;
+                border-radius: 8px;
+                box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            }}
+            .header {{
+                background-color: #4CAF50;
+                color: white;
+                padding: 10px;
+                text-align: center;
+                font-size: 20px;
+                border-radius: 8px 8px 0 0;
+            }}
+            table {{
+                border-collapse: collapse;
+                width: 100%;
+                margin-top: 10px;
+            }}
+            th, td {{
+                border: 1px solid #ddd;
+                padding: 8px;
+                text-align: left;
+            }}
+            th {{
+                background-color: #4CAF50;
+                color: white;
+            }}
+            # th.job-id-column {{
+            #     width: 120px; /* Increase the width for the Job ID column */
+            # }}
+             th.clientName-column {{
+                width: 100px; /* Increase the width for the Job ID column */
+            }}
+            tr:nth-child(even) {{
+                background-color: #f9f9f9;
+            }}
+            p {{
+                margin: 10px 0;
+            }}
+            .footer {{
+                margin-top: 20px;
+                font-size: 12px;
+                color: #777;
+                text-align: center;
+                border-top: 1px solid #ddd;
+                padding-top: 10px;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                Candidate Assignment Notification
+            </div>
+            <p>Hi {new_recruiter_name},</p>
+            <p>Candidate data has been transferred to your ATS account.</p>
+            <p> Please find the details below:</p>
+            <table>
+                <tr>
+                    <th class="job-id-column">Job ID</th>
+                    <th class="clientName-column">Client Name</th>
+                    <th>Role/Profile</th>
+                    <th>Candidate Name</th>
+                    <th>Previous Recruiter</th>
+                </tr>
+                {candidates_data}
+            </table>
+            <p>Please check <b>ATS Dashboard</b> page for more details.</p>
+            <p>Best Regards,</p>
+            <p><b>Makonis Talent Track Pro Team</b></p>
+        </div>
+    </body>
+    </html>
+    """
+
+    msg = Message(
+        # 'Candidate Assignment Notification',
+        f'Candidate Data Transferred',
+        sender='ganesh.s@makonissoft.com',
+        recipients=[recruiter_email]
+    )
+    msg.html = html_body
+    mail.send(msg)
+
+
+# def assign_candidates_notification(recruiter_email, new_recruiter_name, candidates_data):
+#     html_body = f"""
+#     <html>
+#     <head>
+#         <style>
+#             body {{
+#                 font-family: Arial, sans-serif;
+#                 color: #333;
+#                 line-height: 1.6;
+#                 background-color: #f4f4f4;
+#                 margin: 0;
+#                 padding: 0;
+#             }}
+#             .container {{
+#                 padding: 20px;
+#                 margin: 20px auto;
+#                 max-width: 600px;
+#                 background-color: #ffffff;
+#                 border: 1px solid #ddd;
+#                 border-radius: 8px;
+#                 box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+#             }}
+#             .header {{
+#                 background-color: #4CAF50;
+#                 color: white;
+#                 padding: 10px;
+#                 text-align: center;
+#                 font-size: 20px;
+#                 border-radius: 8px 8px 0 0;
+#             }}
+#             table {{
+#                 border-collapse: collapse;
+#                 width: 100%;
+#                 margin-top: 10px;
+#             }}
+#             th, td {{
+#                 border: 1px solid #ddd;
+#                 padding: 8px;
+#                 text-align: left;
+#             }}
+#             th {{
+#                 background-color: #4CAF50;
+#                 color: white;
+#             }}
+#             th.job-id-column {{
+#                 width: 120px; /* Increase the width for the Job ID column */
+#             }}
+#             tr:nth-child(even) {{
+#                 background-color: #f9f9f9;
+#             }}
+#             p {{
+#                 margin: 10px 0;
+#             }}
+#             .footer {{
+#                 margin-top: 20px;
+#                 font-size: 12px;
+#                 color: #777;
+#                 text-align: center;
+#                 border-top: 1px solid #ddd;
+#                 padding-top: 10px;
+#             }}
+#         </style>
+#     </head>
+#     <body>
+#         <div class="container">
+#             <div class="header">
+#                 Candidate Assignment Notification
+#             </div>
+#             <p>Dear {new_recruiter_name},</p>
+#             <p>The following candidates have been assigned to you:</p>
+#             <table>
+#                 <tr>
+#                     <th class="job-id-column">Job ID</th>
+#                     <th>Client</th>
+#                     <th>Profile</th>
+#                     <th>Candidate Name</th>
+#                 </tr>
+#                 {candidates_data}
+#             </table>
+#             <p>Check your dashboard for more details.</p>
+#             <p>Regards,</p>
+#             <p>Your Company</p>
+#         </div>
+#     </body>
+#     </html>
+#     """
+
+#     msg = Message(
+#         'Candidate Assignment Notification',
+#         sender='ganesh.s@makonissoft.com',
+#         recipients=[recruiter_email]
+#     )
+#     msg.html = html_body
+#     mail.send(msg)
+
+###########################################################################
+
+# def assign_candidates_notification(recruiter_email, new_recruiter_name, candidates_data):
+#     html_body = f"""
+#     <html>
+#     <head>
+#         <style>
+#             body {{
+#                 font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+#                 color: #444;
+#                 line-height: 1.6;
+#                 background-color: #f8f8f8;
+#                 margin: 0;
+#                 padding: 0;
+#             }}
+#             .container {{
+#                 padding: 20px;
+#                 margin: 20px auto;
+#                 max-width: 600px;
+#                 background-color: #fff;
+#                 border: 1px solid #ddd;
+#                 border-radius: 8px;
+#                 box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+#             }}
+#             .header {{
+#                 background-color: #007BFF;
+#                 color: #fff;
+#                 padding: 20px;
+#                 text-align: center;
+#                 font-size: 24px;
+#                 border-top-left-radius: 8px;
+#                 border-top-right-radius: 8px;
+#             }}
+#             table {{
+#                 border-collapse: collapse;
+#                 width: 100%;
+#                 margin-top: 20px;
+#             }}
+#             th, td {{
+#                 border: 1px solid #ddd;
+#                 padding: 12px;
+#                 text-align: left;
+#             }}
+#             th {{
+#                 background-color: #007BFF;
+#                 color: #fff;
+#             }}
+#             tr:nth-child(even) {{
+#                 background-color: #f2f2f2;
+#             }}
+#             p {{
+#                 margin: 10px 0;
+#                 text-align: justify;
+#             }}
+#             .footer {{
+#                 margin-top: 20px;
+#                 font-size: 12px;
+#                 color: #777;
+#                 text-align: center;
+#                 border-top: 1px solid #ddd;
+#                 padding-top: 10px;
+#             }}
+#         </style>
+#     </head>
+#     <body>
+#         <div class="container">
+#             <div class="header">
+#                 Candidate Assignment Notification
+#             </div>
+#             <p>Dear {new_recruiter_name},</p>
+#             <p>The following candidates have been assigned to you:</p>
+#             <table>
+#                 <tr>
+#                     <th>Job ID</th>
+#                     <th>Candidate ID</th>
+#                     <th>Client</th>
+#                     <th>Profile</th>
+#                     <th>Candidate Name</th>
+#                 </tr>
+#                 {candidates_data}
+#             </table>
+#             <p>Check your dashboard for more details.</p>
+#             <p>Regards,</p>
+#             <p>Your Company</p>
+#             # <div class="footer">
+#             #     &copy; 2024 Your Company. All rights reserved.
+#             # </div>
+#         </div>
+#     </body>
+#     </html>
+#     """
+
+#     msg = Message(
+#         'Candidate Assignment Notification',
+#         sender='ganesh.s@makonissoft.com',
+#         recipients=[recruiter_email]
+#     )
+#     msg.html = html_body
+#     mail.send(msg)
+
+
+# def assign_candidates_notification(recruiter_email, candidate_data):
+#     html_body = f"""
+#     <html>
+#     <head>
+#         <style>
+#             body {{
+#                 font-family: Arial, sans-serif;
+#                 color: #333;
+#                 line-height: 1.6;
+#                 background-color: #f4f4f4;
+#                 margin: 0;
+#                 padding: 0;
+#             }}
+#             .container {{
+#                 padding: 20px;
+#                 margin: 20px auto;
+#                 max-width: 600px;
+#                 background-color: #ffffff;
+#                 border: 1px solid #ddd;
+#                 border-radius: 8px;
+#                 box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+#             }}
+#             .header {{
+#                 background-color: #4CAF50;
+#                 color: white;
+#                 padding: 10px;
+#                 text-align: center;
+#                 font-size: 20px;
+#                 border-radius: 8px 8px 0 0;
+#             }}
+#             table {{
+#                 border-collapse: collapse;
+#                 width: 100%;
+#                 margin-top: 10px;
+#             }}
+#             th, td {{
+#                 border: 1px solid #ddd;
+#                 padding: 8px;
+#                 text-align: left;
+#             }}
+#             th {{
+#                 background-color: #4CAF50;
+#                 color: white;
+#             }}
+#             tr:nth-child(even) {{
+#                 background-color: #f9f9f9;
+#             }}
+#             p {{
+#                 margin: 10px 0;
+#             }}
+#             .footer {{
+#                 margin-top: 20px;
+#                 font-size: 12px;
+#                 color: #777;
+#                 text-align: center;
+#                 border-top: 1px solid #ddd;
+#                 padding-top: 10px;
+#             }}
+#         </style>
+#     </head>
+#     <body>
+#         <div class="container">
+#             <div class="header">
+#                 Candidate Assignment Notification
+#             </div>
+#             <p>Dear Recruiter,</p>
+#             <p>The following candidates have been assigned to you:</p>
+#             <table>
+#                 <tr>
+#                     <th>Candidate ID</th>
+#                     <th>Name</th>
+#                 </tr>
+#                 {candidate_data}
+#             </table>
+#             <p>Check your dashboard for more details.</p>
+#             <p>Regards,</p>
+#             <p>Your Company</p>
+#             <div class="footer">
+#                 &copy; 2024 Your Company. All rights reserved.
+#             </div>
+#         </div>
+#     </body>
+#     </html>
+#     """
+
+#     msg = Message(
+#         'Candidate Assignment Notification',
+#         sender='ganesh.s@makonissoft.com',
+#         recipients=[recruiter_email]
+#     )
+#     msg.html = html_body
+#     mail.send(msg)
+
+
+# def assign_candidates_notification(recruiter_email, candidate_data):
+#     html_body = f"""
+#     <html>
+#     <head>
+#         <style>
+#             body {{
+#                 font-family: Arial, sans-serif;
+#                 color: #333;
+#                 line-height: 1.6;
+#                 background-color: #f8f8f8;
+#                 margin: 0;
+#                 padding: 0;
+#             }}
+#             .container {{
+#                 padding: 20px;
+#                 margin: 20px auto;
+#                 max-width: 600px;
+#                 background-color: #ffffff;
+#                 border: 1px solid #ddd;
+#                 border-radius: 8px;
+#                 box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+#             }}
+#             .header {{
+#                 background-color: #007BFF;
+#                 color: white;
+#                 padding: 10px;
+#                 text-align: center;
+#                 font-size: 24px;
+#                 border-radius: 8px 8px 0 0;
+#             }}
+#             table {{
+#                 border-collapse: collapse;
+#                 width: 100%;
+#                 margin-top: 20px;
+#             }}
+#             th, td {{
+#                 border: 1px solid #ddd;
+#                 padding: 12px;
+#                 text-align: left;
+#             }}
+#             th {{
+#                 background-color: #007BFF;
+#                 color: white;
+#             }}
+#             tr:nth-child(even) {{
+#                 background-color: #f9f9f9;
+#             }}
+#             p {{
+#                 margin: 10px 0;
+#             }}
+#             .footer {{
+#                 margin-top: 20px;
+#                 font-size: 12px;
+#                 color: #777;
+#                 text-align: center;
+#                 border-top: 1px solid #ddd;
+#                 padding-top: 10px;
+#             }}
+#         </style>
+#     </head>
+#     <body>
+#         <div class="container">
+#             <div class="header">
+#                 Candidate Assignment Notification
+#             </div>
+#             <p>Dear Recruiter,</p>
+#             <p>The following candidates have been assigned to you:</p>
+#             <table>
+#                 <tr>
+#                     <th>Candidate ID</th>
+#                     <th>Name</th>
+#                 </tr>
+#                 {candidate_data}
+#             </table>
+#             <p>Check your dashboard for more details.</p>
+#             <p>Regards,</p>
+#             <p>Your Company</p>
+#             <div class="footer">
+#                 &copy; 2024 Your Company. All rights reserved.
+#             </div>
+#         </div>
+#     </body>
+#     </html>
+#     """
+
+#     msg = Message(
+#         'Candidate Assignment Notification',
+#         sender='ganesh.s@makonissoft.com',
+#         recipients=[recruiter_email]
+#     )
+#     msg.html = html_body
+#     mail.send(msg)
+
+
+
+# def assign_candidates_notification(recruiter_email, candidate_data):
+#     html_body = """
+#     <html>
+#     <head></head>
+#     <body>
+#         <p>Dear Recruiter,</p>
+#         <p>The following candidates have been assigned to you:</p>
+#         <table border="1">
+#             <tr>
+#                 <th>Candidate ID</th>
+#                 <th>Name</th>
+#             </tr>
+#             {}
+#         </table>
+#         <p>Check your dashboard for more details.</p>
+#         <p>Regards,</p>
+#         <p>Your Company</p>
+#     </body>
+#     </html>
+#     """.format(candidate_data)
+
+#     msg = Message(
+#         'Candidate Assignment Notification',
+#         sender='ganesh.s@makonissoft.com',
+#         recipients=[recruiter_email]
+#     )
+#     msg.html = html_body
+#     mail.send(msg)
+
+
+# @app.route('/assign_candidate_new_recuriter', methods=['POST'])
+# def assign_candidate_to_a_new_recruiter():
 #     data = request.json
-#     username = data['user_name']
-    
-#     # Find the recruiter with the given username
-#     recruiter = User.query.filter_by(username=username, user_type='recruiter').first()
-    
-#     if recruiter:
-#         # Find all candidates linked with the recruiter's username
-#         candidates = Candidate.query.filter_by(recruiter=recruiter.username).all()
-        
-#         # Prepare response data
-#         candidates_list = [{'id': candidate.id, 'username': candidate.name, 'status':candidate.status, 'profile':candidate.profile, 'recruiter':candidate.recruiter} for candidate in candidates]
-#         return jsonify(candidates_list)
-#     else:
-#         return jsonify({'error': 'Recruiter not found'})
+
+#     try:
+#         candidates_data = ""
+#         current_datetime = datetime.now(pytz.timezone('Asia/Kolkata'))
+
+#         for candidate_data in data['candidates']:
+#             candidate_id = candidate_data.get('candidate_id')
+#             new_recruiter_username = candidate_data.get('new_recruiter')
+#             current_recruiter_username = candidate_data.get('current_recruiter')
+
+#             if not candidate_id or not new_recruiter_username or not current_recruiter_username:
+#                 return jsonify({"error": "Candidate ID, new recruiter username, or current recruiter username not provided"}), 400
+
+#             # Fetch candidate details from the database
+#             candidate = Candidate.query.filter(
+#                 Candidate.id == candidate_id,
+#                 or_(
+#                     Candidate.recruiter == current_recruiter_username,
+#                     Candidate.management == current_recruiter_username
+#                 )
+#             ).first()
+
+#             if candidate is None:
+#                 return jsonify({"error": f"Candidate with ID {candidate_id} not found or not assigned to current recruiter/management {current_recruiter_username}"}), 404
+
+#             # Append candidate details to the candidates_data string
+#             candidates_data += f"<tr><td>{candidate.job_id}</td><td>{candidate.client}</td><td>{candidate.profile}</td><td>{candidate.name}</td><td>{current_recruiter_username}</td></tr>"
+
+#             # Update the recruiter for the candidate
+#             candidate.recruiter = new_recruiter_username
+#             candidate.data_updated_date = current_datetime.date()
+#             candidate.data_updated_time = current_datetime.time()
+
+#         # Commit changes to the database
+#         db.session.commit()
+
+#         # Fetch new recruiter's name
+#         new_recruiter = User.query.filter_by(username=new_recruiter_username).first()
+#         new_recruiter_name = new_recruiter.username if new_recruiter else "New Recruiter"
+
+#         # Send notification email to the new recruiter
+#         if candidates_data:
+#             assign_candidates_notification(new_recruiter.email, new_recruiter_name, candidates_data)
+
+#         return jsonify({'status': 'success', 'message': 'Candidates assigned successfully.'})
+#     except Exception as e:
+#         db.session.rollback()
+#         return jsonify({'status': 'error', 'error': f"Error assigning candidates: {str(e)}"}), 500
 
 
-@app.route('/assign_candidate_new_recuriter', methods=['POST']) 
+
+@app.route('/assign_candidate_new_recuriter', methods=['POST'])
 def assign_candidate_to_a_new_recruiter():
     data = request.json
 
     try:
-        candidates_data = []
+        candidates_data = ""
+        current_datetime = datetime.now(pytz.timezone('Asia/Kolkata'))
+
         for candidate_data in data['candidates']:
             candidate_id = candidate_data.get('candidate_id')
             new_recruiter_username = candidate_data.get('new_recruiter')
@@ -746,37 +1487,219 @@ def assign_candidate_to_a_new_recruiter():
             if not candidate_id or not new_recruiter_username or not current_recruiter_username:
                 return jsonify({"error": "Candidate ID, new recruiter username, or current recruiter username not provided"}), 400
 
-            # Get the candidate, current recruiter, and the new recruiter from the database using their usernames
-            candidate = Candidate.query.filter_by(id=candidate_id, recruiter=current_recruiter_username).first()
-            # if candidate.profile_transfered != None:
-            #     candidate.profile_transfered = "YES" 
-            # else:
-            #     candidate.profile_transfered = None
-            current_recruiter = User.query.filter_by(username=current_recruiter_username, user_type='recruiter').first()
-            new_recruiter = User.query.filter_by(username=new_recruiter_username, user_type='recruiter').first()
+            # Fetch candidate details from the database
+            candidate = Candidate.query.filter(
+                Candidate.id == candidate_id,
+                or_(
+                    Candidate.recruiter == current_recruiter_username,
+                    Candidate.management == current_recruiter_username
+                )
+            ).first()
 
             if candidate is None:
-                return jsonify({"error": "Candidate not found or not assigned to current recruiter"}), 404
+                return jsonify({"error": f"Candidate with ID {candidate_id} not found or not assigned to current recruiter/management {current_recruiter_username}"}), 404
 
-            if current_recruiter is None:
-                return jsonify({"error": "Current recruiter not found or not a recruiter"}), 404
+            # # Append candidate details to the candidates_data string
+            # candidates_data += f"<tr><td>{candidate.job_id}</td><td>{candidate.client}</td><td>{candidate.profile}</td><td>{candidate.name}</td></tr>"
 
-            if new_recruiter is None:
-                return jsonify({"error": "New recruiter not found or not a recruiter"}), 404
+            # Append candidate details to the candidates_data string
+            candidates_data += f"<tr><td>{candidate.job_id}</td><td>{candidate.client}</td><td>{candidate.profile}</td><td>{candidate.name}</td><td>{escape(current_recruiter_username)}</td></tr>"
 
-            # Update the candidate record to point to the new recruiter
+            # Update the recruiter for the candidate
             candidate.recruiter = new_recruiter_username
-            db.session.commit()
+            candidate.data_updated_date = current_datetime.date()
+            candidate.data_updated_time = current_datetime.time()
 
-            candidates_data.append({'id': candidate.id, 'name': candidate.name})
+        # Commit changes to the database
+        db.session.commit()
 
-        return jsonify({
-            "message": "Candidates assigned successfully.",
-            "candidates": candidates_data
-        })
+        # Fetch new recruiter's name
+        new_recruiter = User.query.filter_by(username=new_recruiter_username).first()
+        new_recruiter_name = new_recruiter.username if new_recruiter else "New Recruiter"
+
+        # Send notification email to the new recruiter
+        if candidates_data:
+            assign_candidates_notification(new_recruiter.email, new_recruiter_name, candidates_data)
+
+        return jsonify({'status': 'success',"message": "Candidates assigned successfully."})
     except Exception as e:
         db.session.rollback()
-        return jsonify({"error": "Error assigning candidates: " + str(e)}), 500
+        return jsonify({'status': 'error',"error": f"Error assigning candidates: {str(e)}"}), 500
+
+###################################################################################################
+
+# @app.route('/assign_candidate_new_recuriter', methods=['POST'])
+# def assign_candidate_to_a_new_recruiter():
+#     data = request.json
+
+#     try:
+#         candidates_data = ""
+#         current_datetime = datetime.now(pytz.timezone('Asia/Kolkata'))
+
+#         for candidate_data in data['candidates']:
+#             candidate_id = candidate_data.get('candidate_id')
+#             new_recruiter_username = candidate_data.get('new_recruiter')
+#             current_recruiter_username = candidate_data.get('current_recruiter')
+
+#             if not candidate_id or not new_recruiter_username or not current_recruiter_username:
+#                 return jsonify({"error": "Candidate ID, new recruiter username, or current recruiter username not provided"}), 400
+
+#             # Fetch candidate details from the database
+#             candidate = Candidate.query.filter(
+#                 Candidate.id == candidate_id,
+#                 or_(
+#                     Candidate.recruiter == current_recruiter_username,
+#                     Candidate.management == current_recruiter_username
+#                 )
+#             ).first()
+
+#             if candidate is None:
+#                 return jsonify({"error": f"Candidate with ID {candidate_id} not found or not assigned to current recruiter/management {current_recruiter_username}"}), 404
+
+#             # Append candidate details to the candidates_data string
+#             candidates_data += f"<tr><td>{candidate.job_id}</td><td>{candidate.id}</td><td>{candidate.client}</td><td>{candidate.profile}</td><td>{candidate.name}</td></tr>"
+
+#             # Update the recruiter for the candidate
+#             candidate.recruiter = new_recruiter_username
+#             candidate.data_updated_date = current_datetime.date()
+#             candidate.data_updated_time = current_datetime.time()
+
+#         # Commit changes to the database
+#         db.session.commit()
+
+#         # Fetch new recruiter's name
+#         new_recruiter = User.query.filter_by(username=new_recruiter_username).first()
+#         new_recruiter_name = new_recruiter.username if new_recruiter else "New Recruiter"
+
+#         # Send notification email to the new recruiter
+#         if candidates_data:
+#             assign_candidates_notification(new_recruiter.email, new_recruiter_name, candidates_data)
+
+#         return jsonify({'status': 'success',"message": "Candidates assigned successfully."})
+#     except Exception as e:
+#         db.session.rollback()
+#         return jsonify({'status': 'error',"error": f"Error assigning candidates: {str(e)}"}), 500
+
+
+# @app.route('/assign_candidate_new_recuriter', methods=['POST'])
+# def assign_candidate_to_a_new_recruiter():
+#     data = request.json
+
+#     try:
+#         candidates_data = []
+#         candidate_table_data = ""
+#         current_datetime = datetime.now(pytz.timezone('Asia/Kolkata'))
+
+#         for candidate_data in data['candidates']:
+#             candidate_id = candidate_data.get('candidate_id')
+#             new_recruiter_username = candidate_data.get('new_recruiter')
+#             current_recruiter_username = candidate_data.get('current_recruiter')
+
+#             if not candidate_id or not new_recruiter_username or not current_recruiter_username:
+#                 return jsonify({"error": "Candidate ID, new recruiter username, or current recruiter username not provided"}), 400
+
+#             # Get the candidate, current recruiter, and the new recruiter from the database using their usernames
+#             candidate = Candidate.query.filter(
+#                 Candidate.id == candidate_id,
+#                 or_(
+#                     Candidate.recruiter == current_recruiter_username,
+#                     Candidate.management == current_recruiter_username
+#                 )
+#             ).first()
+#             current_recruiter = User.query.filter_by(username=current_recruiter_username).first()
+#             new_recruiter = User.query.filter_by(username=new_recruiter_username).first()
+
+#             if candidate is None:
+#                 return jsonify({"error": f"Candidate with ID {candidate_id} not found or not assigned to current recruiter/management {current_recruiter_username}"}), 404
+
+#             if current_recruiter is None:
+#                 return jsonify({"error": f"Current recruiter {current_recruiter_username} not found"}), 404
+
+#             if new_recruiter is None:
+#                 return jsonify({"error": f"New recruiter {new_recruiter_username} not found"}), 404
+
+#             # Update the candidate record to point to the new recruiter and set the updated date/time
+#             candidate.recruiter = new_recruiter_username
+#             candidate.data_updated_date = current_datetime.date()
+#             candidate.data_updated_time = current_datetime.time()
+
+#             candidates_data.append({'id': candidate.id, 'name': candidate.name})
+#             candidate_table_data += "<tr><td>{}</td><td>{}</td></tr>".format(candidate.id, candidate.name)
+
+#         # Commit all updates in a single transaction
+#         db.session.commit()
+
+#         # Send notification email to the new recruiter
+#         if candidate_table_data:
+#             assign_candidates_notification(new_recruiter.email, candidate_table_data)
+
+#         return jsonify({
+#             "message": "Candidates assigned successfully.",
+#             "candidates": candidates_data
+#         })
+#     except Exception as e:
+#         db.session.rollback()
+#         return jsonify({"error": f"Error assigning candidates: {str(e)}"}), 500
+
+
+
+
+
+# @app.route('/assign_candidate_new_recuriter', methods=['POST'])
+# def assign_candidate_to_a_new_recruiter():
+#     data = request.json
+
+#     try:
+#         candidates_data = []
+#         current_datetime = datetime.now(pytz.timezone('Asia/Kolkata'))
+
+#         for candidate_data in data['candidates']:
+#             candidate_id = candidate_data.get('candidate_id')
+#             new_recruiter_username = candidate_data.get('new_recruiter')
+#             current_recruiter_username = candidate_data.get('current_recruiter')
+
+#             if not candidate_id or not new_recruiter_username or not current_recruiter_username:
+#                 return jsonify({"error": "Candidate ID, new recruiter username, or current recruiter username not provided"}), 400
+
+#             # Get the candidate, current recruiter, and the new recruiter from the database using their usernames
+#             candidate = Candidate.query.filter(
+#                 Candidate.id == candidate_id,
+#                 or_(
+#                     Candidate.recruiter == current_recruiter_username,
+#                     Candidate.management == current_recruiter_username
+#                 )
+#             ).first()
+#             current_recruiter = User.query.filter_by(username=current_recruiter_username).first()
+#             new_recruiter = User.query.filter_by(username=new_recruiter_username).first()
+
+#             if candidate is None:
+#                 return jsonify({"error": f"Candidate with ID {candidate_id} not found or not assigned to current recruiter/management {current_recruiter_username}"}), 404
+
+#             if current_recruiter is None:
+#                 return jsonify({"error": f"Current recruiter {current_recruiter_username} not found"}), 404
+
+#             if new_recruiter is None:
+#                 return jsonify({"error": f"New recruiter {new_recruiter_username} not found"}), 404
+
+#             # Update the candidate record to point to the new recruiter and set the updated date/time
+#             candidate.recruiter = new_recruiter_username
+#             candidate.data_updated_date = current_datetime.date()
+#             candidate.data_updated_time = current_datetime.time()
+
+#             candidates_data.append({'id': candidate.id, 'name': candidate.name})
+
+#         # Commit all updates in a single transaction
+#         db.session.commit()
+
+#         return jsonify({
+#             "message": "Candidates assigned successfully.",
+#             "candidates": candidates_data
+#         })
+#     except Exception as e:
+#         db.session.rollback()
+#         return jsonify({"error": f"Error assigning candidates: {str(e)}"}), 500
+
+
 
 
 from flask import jsonify
@@ -820,12 +1743,313 @@ def candidate_details(candidate_id, user_type, page_no):
 
 
 from flask import Flask, jsonify, request, Response
+from datetime import date
+import json
+from sqlalchemy import and_
+
+# def date_handler(obj):
+#     if isinstance(obj, (datetime, date)):
+#         return obj.isoformat()
+#     return obj
+
+# @app.route('/dashboard', methods=['POST'])
+# def dashboard():
+#     data = request.json
+#     print(data)  # Just to verify if data is received properly
+#     edit_candidate_message = data.get('edit_candidate_message')
+#     page_no = data.get('page_no')
+#     candidate_message = data.get('candidate_message')
+#     signup_message = data.get('signup_message')
+#     job_message = data.get('job_message')
+#     update_candidate_message = data.get('update_candidate_message')
+#     delete_message = data.get("delete_message")
+    
+#     user_id = data.get('user_id')
+#     if user_id is None:
+#         return jsonify({"message": "User ID missing"}), 400
+    
+#     user = User.query.filter_by(id=user_id).first()
+#     if user is None:
+#         return jsonify({"message": "User not found"}), 404
+    
+#     user_type = user.user_type
+#     user_name = user.username
+    
+#     response_data = {}
+
+#     # Define case statements for conditional ordering
+#     conditional_order_date = case(
+#     Candidate.data_updated_date != None,  # Use != instead of = for comparison
+#     Candidate.data_updated_date,
+#     else_=Candidate.date_created
+#     )
+
+#     conditional_order_time = case(
+#     Candidate.data_updated_time != None,  # Use != instead of = for comparison
+#     Candidate.data_updated_time,
+#     else_=Candidate.time_created
+#     )
+
+#     if user_type == 'recruiter':
+#         recruiter = User.query.filter_by(id=user_id, user_type='recruiter').first()
+#         if recruiter is None:
+#             return jsonify({"message": "Recruiter not found"}), 404
+        
+#         candidates = Candidate.query.filter(and_(Candidate.recruiter == recruiter.name, Candidate.reference.is_(None)))\
+#             .order_by(
+#                 desc(conditional_order_date),
+#                 desc(conditional_order_time),
+#                 desc(Candidate.id)  # Ensure newer candidates appear first if dates are equal
+#             )\
+#             .all()
+
+#         jobs = JobPost.query.filter_by(recruiter=user_name).all()
+        
+#         response_data = {
+#             'user': {
+#                 'id': recruiter.id,
+#                 'name': recruiter.name,
+#                 'user_type': recruiter.user_type,
+#                 'email': recruiter.email
+#                 # Add more attributes as needed
+#             },
+#             'user_type': user_type,
+#             'user_name': user_name,
+#             'candidates': [{
+#                 'id': candidate.id,
+#                 'job_id': candidate.job_id,
+#                 'name': candidate.name,
+#                 'mobile': candidate.mobile,
+#                 'email': candidate.email,
+#                 'client': candidate.client,
+#                 'current_company': candidate.current_company,
+#                 'position': candidate.position,
+#                 'profile': candidate.profile,
+#                 'current_job_location': candidate.current_job_location,
+#                 'preferred_job_location': candidate.preferred_job_location,
+#                 'qualifications': candidate.qualifications,
+#                 'experience': candidate.experience,
+#                 'relevant_experience': candidate.relevant_experience,
+#                 'current_ctc': candidate.current_ctc,
+#                 'expected_ctc': candidate.expected_ctc,
+#                 'notice_period': candidate.notice_period,
+#                 'linkedin_url': candidate.linkedin_url,
+#                 'holding_offer': candidate.holding_offer,
+#                 'recruiter': candidate.recruiter,
+#                 'management': candidate.management,
+#                 'status': candidate.status,
+#                 'remarks': candidate.remarks,
+#                 'skills': candidate.skills,
+#                 'resume': candidate.resume if candidate.resume is not None else "",
+#                 'period_of_notice': candidate.period_of_notice if candidate.notice_period == 'no' else None,
+#                 'last_working_date': candidate.last_working_date if candidate.notice_period in {'yes', 'completed'} else None,
+#                 'buyout': candidate.buyout,
+#                 'date_created': candidate.date_created,
+#                 'time_created': candidate.time_created,
+#                 'data_updated_date': candidate.data_updated_date,
+#                 'data_updated_time': candidate.data_updated_time
+#                 # Add more attributes as needed
+#             } for candidate in candidates],
+#             'jobs': [{
+#                 'id': job.id,
+#                 'client': job.client,
+#                 'experience_min': job.experience_min,
+#                 'experience_max': job.experience_max,
+#                 'budget_min': job.budget_min,
+#                 'budget_max': job.budget_max,
+#                 'location': job.location,
+#                 'shift_timings': job.shift_timings,
+#                 'notice_period': job.notice_period,
+#                 'role': job.role,
+#                 'detailed_jd': job.detailed_jd,
+#                 'jd_pdf': job.jd_pdf,
+#                 'mode': job.mode,
+#                 'recruiter': job.recruiter,
+#                 'management': job.management,
+#                 'date_created': job.date_created,
+#                 'time_created': job.time_created,
+#                 'job_status': job.job_status,
+#                 'job_type': job.job_type,
+#                 'skills': job.skills,
+#                 'notification': job.notification,
+#                 'date_created': job.date_created,
+#                 'time_created': job.time_created,
+#                 'data_updated_date': job.data_updated_date,
+#                 'data_updated_time': job.data_updated_time
+#                 # Add more attributes as needed
+#             } for job in jobs],
+#             'edit_candidate_message': edit_candidate_message,
+#             'page_no': page_no,
+#         }
+        
+#     elif user_type == 'management':
+#         users = User.query.all()
+#         candidates = Candidate.query.filter(Candidate.reference.is_(None))\
+#             .order_by(
+#                 desc(conditional_order_date),
+#                 desc(conditional_order_time),
+#                 desc(Candidate.id)  # Ensure newer candidates appear first if dates are equal
+#             )\
+#             .all()
+
+#         jobs = JobPost.query.all()
+        
+#         response_data = {
+#             'users': [{
+#                 'id': user.id,
+#                 'name': user.name,
+#                 'user_type': user.user_type,
+#                 'email': user.email
+#                 # Add more attributes as needed
+#             } for user in users],
+#             'user_type': user_type,
+#             'user_name': user_name,
+#             'candidates': [{
+#                 'id': candidate.id,
+#                 'job_id': candidate.job_id,
+#                 'name': candidate.name,
+#                 'mobile': candidate.mobile,
+#                 'email': candidate.email,
+#                 'client': candidate.client,
+#                 'current_company': candidate.current_company,
+#                 'position': candidate.position,
+#                 'profile': candidate.profile,
+#                 'current_job_location': candidate.current_job_location,
+#                 'preferred_job_location': candidate.preferred_job_location,
+#                 'qualifications': candidate.qualifications,
+#                 'experience': candidate.experience,
+#                 'relevant_experience': candidate.relevant_experience,
+#                 'current_ctc': candidate.current_ctc,
+#                 'expected_ctc': candidate.expected_ctc,
+#                 'notice_period': candidate.notice_period,
+#                 'linkedin_url': candidate.linkedin_url,
+#                 'holding_offer': candidate.holding_offer,
+#                 'recruiter': candidate.recruiter,
+#                 'management': candidate.management,
+#                 'status': candidate.status,
+#                 'remarks': candidate.remarks,
+#                 'skills': candidate.skills,
+#                 'resume': candidate.resume if candidate.resume is not None else "",
+#                 'period_of_notice': candidate.period_of_notice if candidate.notice_period == 'no' else None,
+#                 'last_working_date': candidate.last_working_date if candidate.notice_period in {'yes', 'completed'} else None,
+#                 'buyout': candidate.buyout,
+#                 'date_created': candidate.date_created,
+#                 'time_created': candidate.time_created,
+#                 'data_updated_date': candidate.data_updated_date,
+#                 'data_updated_time': candidate.data_updated_time
+#                 # Add more attributes as needed
+#             } for candidate in candidates],
+#             'jobs': [{
+#                 'id': job.id,
+#                 'client': job.client,
+#                 'experience_min': job.experience_min,
+#                 'experience_max': job.experience_max,
+#                 'budget_min': job.budget_min,
+#                 'budget_max': job.budget_max,
+#                 'location': job.location,
+#                 'shift_timings': job.shift_timings,
+#                 'notice_period': job.notice_period,
+#                 'role': job.role,
+#                 'detailed_jd': job.detailed_jd,
+#                 'jd_pdf': job.jd_pdf,
+#                 'mode': job.mode,
+#                 'recruiter': job.recruiter,
+#                 'management': job.management,
+#                 'date_created': job.date_created,
+#                 'time_created': job.time_created,
+#                 'job_status': job.job_status,
+#                 'job_type': job.job_type,
+#                 'skills': job.skills,
+#                 'notification': job.notification,
+#                 'date_created': job.date_created,
+#                 'time_created': job.time_created,
+#                 'data_updated_date': job.data_updated_date,
+#                 'data_updated_time': job.data_updated_time
+#                 # Add more attributes as needed
+#             } for job in jobs],
+#             'signup_message': signup_message,
+#             'job_message': job_message,
+#             'page_no': page_no,
+#             'edit_candidate_message': edit_candidate_message
+#         }
+        
+#     else:
+#         candidates = Candidate.query.filter_by(recruiter=user.name)\
+#             .order_by(
+#                 desc(conditional_order_date),
+#                 desc(conditional_order_time),
+#                 desc(Candidate.id)  # Ensure newer candidates appear first if dates are equal
+#             )\
+#             .all()
+        
+#         response_data = {
+#             'user': {
+#                 'id': user.id,
+#                 'name': user.name,
+#                 'user_type': user.user_type,
+#                 'email': user.email
+#                 # Add more attributes as needed
+#             },
+#             'user_type': user_type,
+#             'user_name': user_name,
+#             'candidates': [{
+#                 'id': candidate.id,
+#                 'job_id': candidate.job_id,
+#                 'name': candidate.name,
+#                 'mobile': candidate.mobile,
+#                 'email': candidate.email,
+#                 'client': candidate.client,
+#                 'current_company': candidate.current_company,
+#                 'position': candidate.position,
+#                 'profile': candidate.profile,
+#                 'current_job_location': candidate.current_job_location,
+#                 'preferred_job_location': candidate.preferred_job_location,
+#                 'qualifications': candidate.qualifications,
+#                 'experience': candidate.experience,
+#                 'relevant_experience': candidate.relevant_experience,
+#                 'current_ctc': candidate.current_ctc,
+#                 'expected_ctc': candidate.expected_ctc,
+#                 'notice_period': candidate.notice_period,
+#                 'linkedin_url': candidate.linkedin_url,
+#                 'holding_offer': candidate.holding_offer,
+#                 'recruiter': candidate.recruiter,
+#                 'management': candidate.management,
+#                 'status': candidate.status,
+#                 'remarks': candidate.remarks,
+#                 'skills': candidate.skills,
+#                 'resume': candidate.resume if candidate.resume is not None else "",
+#                 'period_of_notice': candidate.period_of_notice if candidate.notice_period == 'no' else None,
+#                 'last_working_date': candidate.last_working_date if candidate.notice_period in {'yes', 'completed'} else None,
+#                 'buyout': candidate.buyout,
+#                 'date_created': candidate.date_created,
+#                 'time_created': candidate.time_created,
+#                 'data_updated_date': candidate.data_updated_date,
+#                 'data_updated_time': candidate.data_updated_time
+#                 # Add more attributes as needed
+#             } for candidate in candidates],
+#         }
+        
+#     # Convert response_data to JSON string
+#     response_json = json.dumps(response_data, default=date_handler)
+
+#     # Create the response
+#     return response_json
+
+
+
+# def datetime_handler(obj):
+#     if isinstance(obj, (date, datetime)):
+#         return obj.isoformat()
+def date_handler(obj):
+    if isinstance(obj, date):
+        return obj.isoformat()
+    else:
+        return None
 
 @app.route('/dashboard', methods=['POST'])
 def dashboard():
     data = request.json
     print(data)  # Just to verify if data is received properly
-
     edit_candidate_message = data.get('edit_candidate_message')
     page_no = data.get('page_no')
     candidate_message = data.get('candidate_message')
@@ -833,250 +2057,1358 @@ def dashboard():
     job_message = data.get('job_message')
     update_candidate_message = data.get('update_candidate_message')
     delete_message = data.get("delete_message")
-
-    # data = request.json
-    user_id = data['user_id']
+    
+    user_id = data.get('user_id')
+    if user_id is None:
+        return jsonify({"message": "User ID missing"}), 400
+    
     user = User.query.filter_by(id=user_id).first()
+    if user is None:
+        return jsonify({"message": "User not found"}), 404
+    
     user_type = user.user_type
     user_name = user.username
-
+    
     response_data = {}
 
-    if user_id and user_type:
-        if user_type == 'recruiter':
-            recruiter = User.query.filter_by(id=user_id, user_type='recruiter').first()
-            if recruiter:
-                candidates = Candidate.query.filter(and_(Candidate.recruiter == recruiter.name, Candidate.reference.is_(None))).all()  # Filter candidates by recruiter's name
-                candidates = sorted(candidates, key=lambda candidate: candidate.id)
-                jobs = JobPost.query.filter_by(recruiter=user_name).all()  # Filter jobs by recruiter's name
-                count_notification_no = Notification.query.filter(Notification.notification_status == 'false',
-                                                                  Notification.recruiter_name == user_name).count()
-                career_count_notification_no = Career_notification.query.filter(Career_notification.notification_status == 'false',
-                                                                  Career_notification.recruiter_name == user_name).count()
-                response_data = {
-                    'user': {
-                        'id': recruiter.id,
-                        'name': recruiter.name,
-                        'user_type': recruiter.user_type,
-                        'email': recruiter.email
-                        # Add more attributes as needed
-                    },
-                    'user_type': user_type,
-                    'user_name': user_name,
-                    'candidates': [{
-                        'id': candidate.id,
-                        'job_id': candidate.job_id,
-                        'name': candidate.name,
-                        'mobile': candidate.mobile,
-                        'email': candidate.email,
-                        'client': candidate.client,
-                        'current_company': candidate.current_company,
-                        'position': candidate.position,
-                        'profile': candidate.profile,
-                        'current_job_location': candidate.current_job_location,
-                        'preferred_job_location': candidate.preferred_job_location,
-                        'qualifications': candidate.qualifications,
-                        'experience': candidate.experience,
-                        'relevant_experience': candidate.relevant_experience,
-                        'current_ctc': candidate.current_ctc,
-                        'expected_ctc': candidate.expected_ctc,
-                        'notice_period': candidate.notice_period,
-                        'linkedin_url': candidate.linkedin_url,
-                        'holding_offer': candidate.holding_offer,
-                        'recruiter': candidate.recruiter,
-                        'management': candidate.management,
-                        'status': candidate.status,
-                        'remarks': candidate.remarks,
-                        'skills': candidate.skills,
-                        'resume': candidate.resume,
-                        'period_of_notice': candidate.period_of_notice if candidate.notice_period == 'no' else None,
-                        'last_working_date': candidate.last_working_date if candidate.notice_period in {'yes', 'completed'} else None,
-                        'buyout': candidate.buyout,
-                        'date_created':candidate.date_created,
-                        'time_created':candidate.time_created
+    # Define case statements for conditional ordering
+    conditional_order_date = case(
+        (Candidate.data_updated_date != None, Candidate.data_updated_date),
+        (Candidate.date_created != None, Candidate.date_created),
+        else_=Candidate.date_created
+    )
+
+    conditional_order_time = case(
+        (Candidate.data_updated_time != None, Candidate.data_updated_time),
+        (Candidate.time_created != None, Candidate.time_created),
+        else_=Candidate.time_created
+    )
+
+    if user_type == 'recruiter':
+        recruiter = User.query.filter_by(id=user_id, user_type='recruiter').first()
+        # username = recruiter.username
+        if recruiter is None:
+            return jsonify({"message": "Recruiter not found"}), 404
+            
+        # recruiters = recruiter.username.split(',')  # Splitting the recruiter usernames separated by commas
+        user_name = recruiter.username
+        recruiters = user_name.split(',')  # Splitting the recruiter usernames separated by commas
+
+        print("Recruiter usernames:", recruiters)  # Debugging statement to check the recruiter usernames
+        
+        candidates = Candidate.query.filter(and_(Candidate.recruiter == recruiter.username, Candidate.reference.is_(None)))\
+            .order_by(
+                desc(conditional_order_date),
+                desc(conditional_order_time),
+                desc(Candidate.id)  # Ensure newer candidates appear first if dates are equal
+            )\
+            .all()
+        jobs_query = JobPost.query.filter(
+            or_(*[JobPost.recruiter.like(f"%{recruiter}%") for recruiter in recruiters])
+         )
+        jobs = jobs_query.all()
+
+        print("Jobs retrieved:", jobs)  # Debugging statement to check the jobs retrieved
+
+
+        # jobs = JobPost.query.filter_by(recruiter=user_name).all()
+        # jobs = JobPost.query.filter(JobPost.recruiter.in_(recruiters)).all()
+        
+        response_data = {
+            'user': {
+                'id': recruiter.id,
+                'name': recruiter.username,
+                'user_type': recruiter.user_type,
+                'email': recruiter.email
+                # Add more attributes as needed
+            },
+            'user_type': user_type,
+            'user_name': user_name,
+            'candidates': [{
+                'id': candidate.id,
+                'job_id': candidate.job_id,
+                'name': candidate.name,
+                'mobile': candidate.mobile,
+                'email': candidate.email,
+                'client': candidate.client,
+                'current_company': candidate.current_company,
+                'position': candidate.position,
+                'profile': candidate.profile,
+                'current_job_location': candidate.current_job_location,
+                'preferred_job_location': candidate.preferred_job_location,
+                'qualifications': candidate.qualifications,
+                'experience': candidate.experience,
+                'relevant_experience': candidate.relevant_experience,
+                'current_ctc': candidate.current_ctc,
+                'expected_ctc': candidate.expected_ctc,
+                'notice_period': candidate.notice_period,
+                'linkedin_url': candidate.linkedin_url,
+                'holding_offer': candidate.holding_offer,
+                'recruiter': candidate.recruiter,
+                'management': candidate.management,
+                'status': candidate.status,
+                'remarks': candidate.remarks,
+                'skills': candidate.skills,
+                'resume': candidate.resume if candidate.resume is not None else "",
+                # 'period_of_notice': candidate.period_of_notice if candidate.notice_period == 'no' else None,
+                # 'last_working_date': candidate.last_working_date if candidate.notice_period in {'yes', 'completed'} else None,
+                'serving_notice_period' :candidate.notice_period,
+                'period_of_notice': candidate.period_of_notice,
+                'last_working_date': candidate.last_working_date,
+                'total_offers': candidate.total,
+                'highest_package_in_lpa' : candidate.package_in_lpa,
+                'buyout': candidate.buyout,
+                'date_created': candidate.date_created,
+                'time_created': candidate.time_created,
+                'data_updated_date': candidate.data_updated_date,
+                'data_updated_time': candidate.data_updated_time,
+                'resume_present':candidate.resume_present
+                # Add more attributes as needed
+            } for candidate in candidates],
+            'jobs': [{
+                'id': job.id,
+                'client': job.client,
+                'experience_min': job.experience_min,
+                'experience_max': job.experience_max,
+                'budget_min': job.budget_min,
+                'budget_max': job.budget_max,
+                'location': job.location,
+                'shift_timings': job.shift_timings,
+                'notice_period': job.notice_period,
+                'role': job.role,
+                'detailed_jd': job.detailed_jd,
+                'jd_pdf': job.jd_pdf,
+                'mode': job.mode,
+                'recruiter': job.recruiter,
+                'management': job.management,
+                'date_created': job.date_created,
+                'time_created': job.time_created,
+                'job_status': job.job_status,
+                'job_type': job.job_type,
+                'contract_in_months': job.contract_in_months,
+                'skills': job.skills,
+                'notification': job.notification,
+                'date_created': job.date_created,
+                'time_created': job.time_created,
+                'data_updated_date': job.data_updated_date,
+                'data_updated_time': job.data_updated_time,
+                'jd_pdf_present':job.jd_pdf_present
+                # Add more attributes as needed
+            } for job in jobs],
+            'edit_candidate_message': edit_candidate_message,
+            'page_no': page_no,
+        }
+        
+    elif user_type == 'management':
+        # Define case statements for conditional ordering
+        conditional_order_date = case(
+        (Candidate.date_created != None, Candidate.date_created),
+        else_=Candidate.date_created
+        )
+
+        conditional_order_time = case(
+        (Candidate.time_created != None, Candidate.time_created),
+        else_=Candidate.time_created
+        )
+
+        users = User.query.all()
+        
+        candidates = Candidate.query.filter(Candidate.reference.is_(None))\
+            .order_by(
+                desc(conditional_order_date),
+                desc(conditional_order_time),
+                desc(Candidate.id)  # Ensure newer candidates appear first if dates are equal
+            )\
+            .all()
+
+        jobs = JobPost.query.all()
+        
+        response_data = {
+            'users': [{
+                'id': user.id,
+                'name': user.name,
+                'user_type': user.user_type,
+                'email': user.email
+                # Add more attributes as needed
+            } for user in users],
+            'user_type': user_type,
+            'user_name': user_name,
+            'candidates': [{
+                'id': candidate.id,
+                'job_id': candidate.job_id,
+                'name': candidate.name,
+                'mobile': candidate.mobile,
+                'email': candidate.email,
+                'client': candidate.client,
+                'current_company': candidate.current_company,
+                'position': candidate.position,
+                'profile': candidate.profile,
+                'current_job_location': candidate.current_job_location,
+                'preferred_job_location': candidate.preferred_job_location,
+                'qualifications': candidate.qualifications,
+                'experience': candidate.experience,
+                'relevant_experience': candidate.relevant_experience,
+                'current_ctc': candidate.current_ctc,
+                'expected_ctc': candidate.expected_ctc,
+                'notice_period': candidate.notice_period,
+                'linkedin_url': candidate.linkedin_url,
+                'holding_offer': candidate.holding_offer,
+                'recruiter': candidate.recruiter,
+                'management': candidate.management,
+                'status': candidate.status,
+                'remarks': candidate.remarks,
+                'skills': candidate.skills,
+                'resume': candidate.resume if candidate.resume is not None else "",
+                # 'period_of_notice': candidate.period_of_notice if candidate.notice_period == 'no' else None,
+                # 'last_working_date': candidate.last_working_date if candidate.notice_period in {'yes', 'completed'} else None,
+                'serving_notice_period' :candidate.notice_period,
+                'period_of_notice': candidate.period_of_notice,
+                'last_working_date': candidate.last_working_date,
+                'total_offers': candidate.total,
+                'highest_package_in_lpa' :candidate.package_in_lpa,
+                'buyout': candidate.buyout,
+                'date_created': candidate.date_created,
+                'time_created': candidate.time_created,
+                'data_updated_date': candidate.data_updated_date,
+                'data_updated_time': candidate.data_updated_time,
+                'resume_present':candidate.resume_present
+                # Add more attributes as needed
+            } for candidate in candidates],
+            'jobs': [{
+                'id': job.id,
+                'client': job.client,
+                'experience_min': job.experience_min,
+                'experience_max': job.experience_max,
+                'budget_min': job.budget_min,
+                'budget_max': job.budget_max,
+                'location': job.location,
+                'shift_timings': job.shift_timings,
+                'notice_period': job.notice_period,
+                'role': job.role,
+                'detailed_jd': job.detailed_jd,
+                'jd_pdf': job.jd_pdf,
+                'mode': job.mode,
+                'recruiter': job.recruiter,
+                'management': job.management,
+                'date_created': job.date_created,
+                'time_created': job.time_created,
+                'job_status': job.job_status,
+                'job_type': job.job_type,
+                'contract_in_months': job.contract_in_months,
+                'skills': job.skills,
+                'notification': job.notification,
+                'date_created': job.date_created,
+                'time_created': job.time_created,
+                'data_updated_date': job.data_updated_date,
+                'data_updated_time': job.data_updated_time,
+                'jd_pdf_present':job.jd_pdf_present
+                # Add more attributes as needed
+            } for job in jobs],
+            'signup_message': signup_message,
+            'job_message': job_message,
+            'page_no': page_no,
+            'edit_candidate_message': edit_candidate_message
+        }
+        
+    else:
+        candidates = Candidate.query.filter_by(recruiter=user.name)\
+            .order_by(
+                desc(conditional_order_date),
+                desc(conditional_order_time),
+                desc(Candidate.id)  # Ensure newer candidates appear first if dates are equal
+            )\
+            .all()
+        
+        response_data = {
+            'user': {
+                'id': user.id,
+                'name': user.name,
+                'user_type': user.user_type,
+                'email': user.email
+                # Add more attributes as needed
+            },
+            'user_type': user_type,
+            'user_name': user_name,
+            'candidates': [{
+                'id': candidate.id,
+                'job_id': candidate.job_id,
+                'name': candidate.name,
+                'mobile': candidate.mobile,
+                'email': candidate.email,
+                'client': candidate.client,
+                'current_company': candidate.current_company,
+                'position': candidate.position,
+                'profile': candidate.profile,
+                'current_job_location': candidate.current_job_location,
+                'preferred_job_location': candidate.preferred_job_location,
+                'qualifications': candidate.qualifications,
+                'experience': candidate.experience,
+                'relevant_experience': candidate.relevant_experience,
+                'current_ctc': candidate.current_ctc,
+                'expected_ctc': candidate.expected_ctc,
+                'notice_period': candidate.notice_period,
+                'linkedin_url': candidate.linkedin_url,
+                'holding_offer': candidate.holding_offer,
+                'recruiter': candidate.recruiter,
+                'management': candidate.management,
+                'status': candidate.status,
+                'remarks': candidate.remarks,
+                'skills': candidate.skills,
+                'resume': candidate.resume if candidate.resume is not None else "",
+                # 'period_of_notice': candidate.period_of_notice if candidate.notice_period == 'no' else None,
+                # 'last_working_date': candidate.last_working_date if candidate.notice_period in {'yes', 'completed'} else None,
+                'serving_notice_period' :candidate.notice_period,
+                'period_of_notice': candidate.period_of_notice,
+                'last_working_date': candidate.last_working_date,
+                'buyout': candidate.buyout,
+                'total_offers': candidate.total,
+                'highest_package_in_lpa' : candidate.package_in_lpa,
+                'date_created': candidate.date_created,
+                'time_created': candidate.time_created,
+                'data_updated_date': candidate.data_updated_date,
+                'data_updated_time': candidate.data_updated_time,
+                'resume_present':candidate.resume_present
+                # Add more attributes as needed
+            } for candidate in candidates],
+        }
+        
+    # Convert response_data to JSON string
+    response_json = json.dumps(response_data, default=date_handler)
+
+    # Create the response
+    return response_json
+############################################
+
+# def date_handler(obj):
+#     if isinstance(obj, date):
+#         return obj.isoformat()
+#     else:
+#         return None
+
+# @app.route('/dashboard', methods=['POST'])
+# def dashboard():
+#     data = request.json
+#     print(data)  # Just to verify if data is received properly
+#     edit_candidate_message = data.get('edit_candidate_message')
+#     page_no = data.get('page_no')
+#     candidate_message = data.get('candidate_message')
+#     signup_message = data.get('signup_message')
+#     job_message = data.get('job_message')
+#     update_candidate_message = data.get('update_candidate_message')
+#     delete_message = data.get("delete_message")
+    
+#     user_id = data.get('user_id')
+#     if user_id is None:
+#         return jsonify({"message": "User ID missing"}), 400
+    
+#     user = User.query.filter_by(id=user_id).first()
+#     if user is None:
+#         return jsonify({"message": "User not found"}), 404
+    
+#     user_type = user.user_type
+#     user_name = user.username
+    
+#     response_data = {}
+    
+#     if user_type == 'recruiter':
+#         recruiter = User.query.filter_by(id=user_id, user_type='recruiter').first()
+#         if recruiter is None:
+#             return jsonify({"message": "Recruiter not found"}), 404
+        
+#         candidates = Candidate.query.filter(and_(Candidate.recruiter == recruiter.name, Candidate.reference.is_(None))).all()  
+#         candidates = sorted(candidates, key=lambda candidate: candidate.id)
+#         jobs = JobPost.query.filter_by(recruiter=user_name).all()
+        
+#         response_data = {
+#             'user': {
+#                 'id': recruiter.id,
+#                 'name': recruiter.name,
+#                 'user_type': recruiter.user_type,
+#                 'email': recruiter.email
+#                 # Add more attributes as needed
+#             },
+#             'user_type': user_type,
+#             'user_name': user_name,
+#             'candidates': [{
+#                         'id': candidate.id,
+#                         'job_id': candidate.job_id,
+#                         'name': candidate.name,
+#                         'mobile': candidate.mobile,
+#                         'email': candidate.email,
+#                         'client': candidate.client,
+#                         'current_company': candidate.current_company,
+#                         'position': candidate.position,
+#                         'profile': candidate.profile,
+#                         'current_job_location': candidate.current_job_location,
+#                         'preferred_job_location': candidate.preferred_job_location,
+#                         'qualifications': candidate.qualifications,
+#                         'experience': candidate.experience,
+#                         'relevant_experience': candidate.relevant_experience,
+#                         'current_ctc': candidate.current_ctc,
+#                         'expected_ctc': candidate.expected_ctc,
+#                         'notice_period': candidate.notice_period,
+#                         'linkedin_url': candidate.linkedin_url,
+#                         'holding_offer': candidate.holding_offer,
+#                         'recruiter': candidate.recruiter,
+#                         'management': candidate.management,
+#                         'status': candidate.status,
+#                         'remarks': candidate.remarks,
+#                         'skills': candidate.skills,
+#                         'resume': candidate.resume,
+#                         # 'resume': candidate.resume if candidate.resume is not None else "",
+#                         'period_of_notice': candidate.period_of_notice if candidate.notice_period == 'no' else None,
+#                         'last_working_date': candidate.last_working_date if candidate.notice_period in {'yes', 'completed'} else None,
+#                         'buyout': candidate.buyout,
+#                         'date_created': candidate.date_created,
+#                         'time_created': candidate.time_created,
+#                         'data_updated_date': candidate.data_updated_date,
+#                         'data_updated_time': candidate.data_updated_time
+#                 # Add more attributes as needed
+#             } for candidate in candidates],
+#             'jobs': [{
+#                         'id': job.id,
+#                         'client': job.client,
+#                         'experience_min': job.experience_min,
+#                         'experience_max': job.experience_max,
+#                         'budget_min': job.budget_min,
+#                         'budget_max': job.budget_max,
+#                         'location': job.location,
+#                         'shift_timings': job.shift_timings,
+#                         'notice_period': job.notice_period,
+#                         'role': job.role,
+#                         'detailed_jd': job.detailed_jd,
+#                         'jd_pdf': job.jd_pdf,
+#                         'mode': job.mode,
+#                         'recruiter': job.recruiter,
+#                         'management': job.management,
+#                         'date_created': job.date_created,
+#                         'time_created': job.time_created,
+#                         'job_status': job.job_status,
+#                         'job_type': job.job_type,
+#                         'skills': job.skills,
+#                         'notification': job.notification,
+#                         'date_created': job.date_created,
+#                         'time_created': job.time_created,
+#                         'data_updated_date': job.data_updated_date,
+#                         'data_updated_time': job.data_updated_time
+
+#                 # Add more attributes as needed
+#             } for job in jobs],
+#             'edit_candidate_message': edit_candidate_message,
+#             'page_no': page_no,
+#         }
+        
+#     elif user_type == 'management':
+#         users = User.query.all()
+#         candidates = Candidate.query.filter(Candidate.reference.is_(None)).all()
+#         candidates = sorted(candidates, key=lambda candidate: candidate.id)
+#         jobs = JobPost.query.all()
+        
+#         response_data = {
+#             'users': [{
+#                 'id': user.id,
+#                 'name': user.name,
+#                 'user_type': user.user_type,
+#                 'email': user.email
+#                 # Add more attributes as needed
+#             } for user in users],
+#             'user_type': user_type,
+#             'user_name': user_name,
+#             'candidates': [{
+#                         'id': candidate.id,
+#                         'job_id': candidate.job_id,
+#                         'name': candidate.name,
+#                         'mobile': candidate.mobile,
+#                         'email': candidate.email,
+#                         'client': candidate.client,
+#                         'current_company': candidate.current_company,
+#                         'position': candidate.position,
+#                         'profile': candidate.profile,
+#                         'current_job_location': candidate.current_job_location,
+#                         'preferred_job_location': candidate.preferred_job_location,
+#                         'qualifications': candidate.qualifications,
+#                         'experience': candidate.experience,
+#                         'relevant_experience': candidate.relevant_experience,
+#                         'current_ctc': candidate.current_ctc,
+#                         'expected_ctc': candidate.expected_ctc,
+#                         'notice_period': candidate.notice_period,
+#                         'linkedin_url': candidate.linkedin_url,
+#                         'holding_offer': candidate.holding_offer,
+#                         'recruiter': candidate.recruiter,
+#                         'management': candidate.management,
+#                         'status': candidate.status,
+#                         'remarks': candidate.remarks,
+#                         'skills': candidate.skills,
+#                         'resume': candidate.resume,
+#                         # 'resume': candidate.resume if candidate.resume is not None else "",
+#                         'period_of_notice': candidate.period_of_notice if candidate.notice_period == 'no' else None,
+#                         'last_working_date': candidate.last_working_date if candidate.notice_period in {'yes', 'completed'} else None,
+#                         'buyout': candidate.buyout,
+#                         'date_created': candidate.date_created,
+#                         'time_created': candidate.time_created,
+#                         'data_updated_date': candidate.data_updated_date,
+#                         'data_updated_time': candidate.data_updated_time
+#                 # Add more attributes as needed
+#             } for candidate in candidates],
+#             'jobs': [{
+#                         'id': job.id,
+#                         'client': job.client,
+#                         'experience_min': job.experience_min,
+#                         'experience_max': job.experience_max,
+#                         'budget_min': job.budget_min,
+#                         'budget_max': job.budget_max,
+#                         'location': job.location,
+#                         'shift_timings': job.shift_timings,
+#                         'notice_period': job.notice_period,
+#                         'role': job.role,
+#                         'detailed_jd': job.detailed_jd,
+#                         'jd_pdf': job.jd_pdf,
+#                         'mode': job.mode,
+#                         'recruiter': job.recruiter,
+#                         'management': job.management,
+#                         'date_created': job.date_created,
+#                         'time_created': job.time_created,
+#                         'job_status': job.job_status,
+#                         'job_type': job.job_type,
+#                         'skills': job.skills,
+#                         'notification': job.notification,
+#                         'date_created': job.date_created,
+#                         'time_created': job.time_created,
+#                         'data_updated_date': job.data_updated_date,
+#                         'data_updated_time': job.data_updated_time
+#                 # Add more attributes as needed
+#             } for job in jobs],
+#             'signup_message': signup_message,
+#             'job_message': job_message,
+#             'page_no': page_no,
+#             'edit_candidate_message': edit_candidate_message
+#         }
+        
+#     else:
+#         candidates = Candidate.query.filter_by(recruiter=user.name).all()  
+        
+#         response_data = {
+#             'user': {
+#                 'id': user.id,
+#                 'name': user.name,
+#                 'user_type': user.user_type,
+#                 'email': user.email
+#                 # Add more attributes as needed
+#             },
+#             'user_type': user_type,
+#             'user_name': user_name,
+#             'candidates': [{
+#                         'id': candidate.id,
+#                         'job_id': candidate.job_id,
+#                         'name': candidate.name,
+#                         'mobile': candidate.mobile,
+#                         'email': candidate.email,
+#                         'client': candidate.client,
+#                         'current_company': candidate.current_company,
+#                         'position': candidate.position,
+#                         'profile': candidate.profile,
+#                         'current_job_location': candidate.current_job_location,
+#                         'preferred_job_location': candidate.preferred_job_location,
+#                         'qualifications': candidate.qualifications,
+#                         'experience': candidate.experience,
+#                         'relevant_experience': candidate.relevant_experience,
+#                         'current_ctc': candidate.current_ctc,
+#                         'expected_ctc': candidate.expected_ctc,
+#                         'notice_period': candidate.notice_period,
+#                         'linkedin_url': candidate.linkedin_url,
+#                         'holding_offer': candidate.holding_offer,
+#                         'recruiter': candidate.recruiter,
+#                         'management': candidate.management,
+#                         'status': candidate.status,
+#                         'remarks': candidate.remarks,
+#                         'skills': candidate.skills,
+#                         'resume': candidate.resume if candidate.resume is not None else "",
+#                         # 'resume': candidate.resume,
+#                         'period_of_notice': candidate.period_of_notice if candidate.notice_period == 'no' else None,
+#                         'last_working_date': candidate.last_working_date if candidate.notice_period in {'yes', 'completed'} else None,
+#                         'buyout': candidate.buyout,
+#                         'date_created': candidate.date_created,
+#                         'time_created': candidate.time_created,
+#                         'data_updated_date': candidate.data_updated_date,
+#                         'data_updated_time': candidate.data_updated_time
+#                 # Add more attributes as needed
+#             } for candidate in candidates],
+            
+#         }
+        
+#     # Convert response_data to JSON string
+#     response_json = json.dumps(response_data, default=date_handler)
+
+#     # Create the response
+#     return response_json
+
+# @app.route('/dashboard', methods=['POST'])
+# def dashboard():
+#     data = request.json
+#     print(data)  # Just to verify if data is received properly
+#     edit_candidate_message = data.get('edit_candidate_message')
+#     page_no = data.get('page_no')
+#     candidate_message = data.get('candidate_message')
+#     signup_message = data.get('signup_message')
+#     job_message = data.get('job_message')
+#     update_candidate_message = data.get('update_candidate_message')
+#     delete_message = data.get("delete_message")
+    
+#     user_id = data.get('user_id')
+#     if user_id is None:
+#         return jsonify({"message": "User ID missing"}), 400
+    
+#     user = User.query.filter_by(id=user_id).first()
+#     if user is None:
+#         return jsonify({"message": "User not found"}), 404
+    
+#     user_type = user.user_type
+#     user_name = user.username
+    
+#     response_data = {}
+    
+#     if user_type == 'recruiter':
+#         recruiter = User.query.filter_by(id=user_id, user_type='recruiter').first()
+#         if recruiter is None:
+#             return jsonify({"message": "Recruiter not found"}), 404
+        
+#         candidates = Candidate.query.filter(and_(Candidate.recruiter == recruiter.name, Candidate.reference.is_(None))).all()  
+#         candidates = sorted(candidates, key=lambda candidate: candidate.id)
+#         jobs = JobPost.query.filter_by(recruiter=user_name).all()
+        
+#         response_data = {
+#             'user': {
+#                 'id': recruiter.id,
+#                 'name': recruiter.name,
+#                 'user_type': recruiter.user_type,
+#                 'email': recruiter.email
+#                 # Add more attributes as needed
+#             },
+#             'user_type': user_type,
+#             'user_name': user_name,
+#             'candidates': [{
+#                         'id': candidate.id,
+#                         'job_id': candidate.job_id,
+#                         'name': candidate.name,
+#                         'mobile': candidate.mobile,
+#                         'email': candidate.email,
+#                         'client': candidate.client,
+#                         'current_company': candidate.current_company,
+#                         'position': candidate.position,
+#                         'profile': candidate.profile,
+#                         'current_job_location': candidate.current_job_location,
+#                         'preferred_job_location': candidate.preferred_job_location,
+#                         'qualifications': candidate.qualifications,
+#                         'experience': candidate.experience,
+#                         'relevant_experience': candidate.relevant_experience,
+#                         'current_ctc': candidate.current_ctc,
+#                         'expected_ctc': candidate.expected_ctc,
+#                         'notice_period': candidate.notice_period,
+#                         'linkedin_url': candidate.linkedin_url,
+#                         'holding_offer': candidate.holding_offer,
+#                         'recruiter': candidate.recruiter,
+#                         'management': candidate.management,
+#                         'status': candidate.status,
+#                         'remarks': candidate.remarks,
+#                         'skills': candidate.skills,
+#                         'resume': candidate.resume,
+#                         'period_of_notice': candidate.period_of_notice if candidate.notice_period == 'no' else None,
+#                         'last_working_date': candidate.last_working_date if candidate.notice_period in {'yes', 'completed'} else None,
+#                         'buyout': candidate.buyout,
+#                         'date_created':candidate.date_created,
+#                         'time_created':candidate.time_created,
+#                         'data_updated_date':candidate.data_updated_date,
+#                         'data_updated_time':candidate.data_updated_time
+#                 # Add more attributes as needed
+#             } for candidate in candidates],
+#             'jobs': [{
+#                         'id': job.id,
+#                         'client': job.client,
+#                         'experience_min': job.experience_min,
+#                         'experience_max': job.experience_max,
+#                         'budget_min': job.budget_min,
+#                         'budget_max': job.budget_max,
+#                         'location': job.location,
+#                         'shift_timings': job.shift_timings,
+#                         'notice_period': job.notice_period,
+#                         'role': job.role,
+#                         'detailed_jd': job.detailed_jd,
+#                         'jd_pdf': job.jd_pdf,
+#                         'mode': job.mode,
+#                         'recruiter': job.recruiter,
+#                         'management': job.management,
+#                         'date_created': job.date_created,
+#                         'time_created': job.time_created,
+#                         'job_status': job.job_status,
+#                         'job_type': job.job_type,
+#                         'skills': job.skills,
+#                         'notification': job.notification,
+#                         'date_created':job.date_created,
+#                         'time_created':job.time_created,
+#                         'data_updated_date':job.data_updated_date,
+#                         'data_updated_time':job.data_updated_time
+
+#                 # Add more attributes as needed
+#             } for job in jobs],
+#             'edit_candidate_message': edit_candidate_message,
+#             'page_no': page_no,
+#         }
+        
+#     elif user_type == 'management':
+#         users = User.query.all()
+#         candidates = Candidate.query.filter(Candidate.reference.is_(None)).all()
+#         candidates = sorted(candidates, key=lambda candidate: candidate.id)
+#         jobs = JobPost.query.all()
+        
+#         response_data = {
+#             'users': [{
+#                 'id': user.id,
+#                 'name': user.name,
+#                 'user_type': user.user_type,
+#                 'email': user.email
+#                 # Add more attributes as needed
+#             } for user in users],
+#             'user_type': user_type,
+#             'user_name': user_name,
+#             'candidates': [{
+#                         'id': candidate.id,
+#                         'job_id': candidate.job_id,
+#                         'name': candidate.name,
+#                         'mobile': candidate.mobile,
+#                         'email': candidate.email,
+#                         'client': candidate.client,
+#                         'current_company': candidate.current_company,
+#                         'position': candidate.position,
+#                         'profile': candidate.profile,
+#                         'current_job_location': candidate.current_job_location,
+#                         'preferred_job_location': candidate.preferred_job_location,
+#                         'qualifications': candidate.qualifications,
+#                         'experience': candidate.experience,
+#                         'relevant_experience': candidate.relevant_experience,
+#                         'current_ctc': candidate.current_ctc,
+#                         'expected_ctc': candidate.expected_ctc,
+#                         'notice_period': candidate.notice_period,
+#                         'linkedin_url': candidate.linkedin_url,
+#                         'holding_offer': candidate.holding_offer,
+#                         'recruiter': candidate.recruiter,
+#                         'management': candidate.management,
+#                         'status': candidate.status,
+#                         'remarks': candidate.remarks,
+#                         'skills': candidate.skills,
+#                         'resume': candidate.resume,
+#                         'period_of_notice': candidate.period_of_notice if candidate.notice_period == 'no' else None,
+#                         'last_working_date': candidate.last_working_date if candidate.notice_period in {'yes', 'completed'} else None,
+#                         'buyout': candidate.buyout,
+#                         'date_created':candidate.date_created,
+#                         'time_created':candidate.time_created,
+#                         'data_updated_date':candidate.data_updated_date,
+#                         'data_updated_time':candidate.data_updated_time
+#                 # Add more attributes as needed
+#             } for candidate in candidates],
+#             'jobs': [{
+#                         'id': job.id,
+#                         'client': job.client,
+#                         'experience_min': job.experience_min,
+#                         'experience_max': job.experience_max,
+#                         'budget_min': job.budget_min,
+#                         'budget_max': job.budget_max,
+#                         'location': job.location,
+#                         'shift_timings': job.shift_timings,
+#                         'notice_period': job.notice_period,
+#                         'role': job.role,
+#                         'detailed_jd': job.detailed_jd,
+#                         'jd_pdf': job.jd_pdf,
+#                         'mode': job.mode,
+#                         'recruiter': job.recruiter,
+#                         'management': job.management,
+#                         'date_created': job.date_created,
+#                         'time_created': job.time_created,
+#                         'job_status': job.job_status,
+#                         'job_type': job.job_type,
+#                         'skills': job.skills,
+#                         'notification': job.notification,
+#                         'date_created':job.date_created,
+#                         'time_created':job.time_created,
+#                         'data_updated_date':job.data_updated_date,
+#                         'data_updated_time':job.data_updated_time
+
+#                 # Add more attributes as needed
+#             } for job in jobs],
+#             'signup_message': signup_message,
+#             'job_message': job_message,
+#             'page_no': page_no,
+#             'edit_candidate_message': edit_candidate_message
+#         }
+        
+#     else:
+#         candidates = Candidate.query.filter_by(recruiter=user.name).all()  
+        
+#         response_data = {
+#             'user': {
+#                 'id': user.id,
+#                 'name': user.name,
+#                 'user_type': user.user_type,
+#                 'email': user.email
+#                 # Add more attributes as needed
+#             },
+#             'user_type': user_type,
+#             'user_name': user_name,
+#             'candidates': [{
+#                         'id': candidate.id,
+#                         'job_id': candidate.job_id,
+#                         'name': candidate.name,
+#                         'mobile': candidate.mobile,
+#                         'email': candidate.email,
+#                         'client': candidate.client,
+#                         'current_company': candidate.current_company,
+#                         'position': candidate.position,
+#                         'profile': candidate.profile,
+#                         'current_job_location': candidate.current_job_location,
+#                         'preferred_job_location': candidate.preferred_job_location,
+#                         'qualifications': candidate.qualifications,
+#                         'experience': candidate.experience,
+#                         'relevant_experience': candidate.relevant_experience,
+#                         'current_ctc': candidate.current_ctc,
+#                         'expected_ctc': candidate.expected_ctc,
+#                         'notice_period': candidate.notice_period,
+#                         'linkedin_url': candidate.linkedin_url,
+#                         'holding_offer': candidate.holding_offer,
+#                         'recruiter': candidate.recruiter,
+#                         'management': candidate.management,
+#                         'status': candidate.status,
+#                         'remarks': candidate.remarks,
+#                         'skills': candidate.skills,
+#                         'resume': candidate.resume,
+#                         'period_of_notice': candidate.period_of_notice if candidate.notice_period == 'no' else None,
+#                         'last_working_date': candidate.last_working_date if candidate.notice_period in {'yes', 'completed'} else None,
+#                         'buyout': candidate.buyout,
+#                         'date_created':candidate.date_created,
+#                         'time_created':candidate.time_created,
+#                         'data_updated_date':candidate.data_updated_date,
+#                         'data_updated_time':candidate.data_updated_time
+#                 # Add more attributes as needed
+#             } for candidate in candidates],
+#         }
+        
+#     # Convert response_data to JSON string
+#     response_json = json.dumps(response_data)
+
+#     # Create the response
+#     return jsonify(response_data)
+
+# @app.route('/dashboard', methods=['POST'])
+# def dashboard():
+#     data = request.json
+#     print(data)  # Just to verify if data is received properly
+#     edit_candidate_message = data.get('edit_candidate_message')
+#     page_no = data.get('page_no')
+#     candidate_message = data.get('candidate_message')
+#     signup_message = data.get('signup_message')
+#     job_message = data.get('job_message')
+#     update_candidate_message = data.get('update_candidate_message')
+#     delete_message = data.get("delete_message")
+#     # data = request.json
+#     user_id = data['user_id']
+#     user = User.query.filter_by(id=user_id).first()
+#     user_type = user.user_type
+#     user_name = user.username
+#     response_data = {}
+#     if user_id and user_type:
+#         if user_type == 'recruiter':
+#             recruiter = User.query.filter_by(id=user_id, user_type='recruiter').first()
+#             if recruiter:
+#                 candidates = Candidate.query.filter(and_(Candidate.recruiter == recruiter.name, Candidate.reference.is_(None))).all()  # Filter candidates by recruiter's name
+#                 candidates = sorted(candidates, key=lambda candidate: candidate.id)
+#                 jobs = JobPost.query.filter_by(recruiter=user_name).all()  # Filter jobs by recruiter's name
+#                 count_notification_no = Notification.query.filter(Notification.notification_status == 'false',
+#                                                                   Notification.recruiter_name == user_name).count()
+#                 career_count_notification_no = Career_notification.query.filter(Career_notification.notification_status == 'false',
+#                                                                   Career_notification.recruiter_name == user_name).count()
+#                 response_data = {
+#                     'user': {
+#                         'id': recruiter.id,
+#                         'name': recruiter.name,
+#                         'user_type': recruiter.user_type,
+#                         'email': recruiter.email
+#                         # Add more attributes as needed
+#                     },
+#                     'user_type': user_type,
+#                     'user_name': user_name,
+#                     'candidates': [{
+#                         'id': candidate.id,
+#                         'job_id': candidate.job_id,
+#                         'name': candidate.name,
+#                         'mobile': candidate.mobile,
+#                         'email': candidate.email,
+#                         'client': candidate.client,
+#                         'current_company': candidate.current_company,
+#                         'position': candidate.position,
+#                         'profile': candidate.profile,
+#                         'current_job_location': candidate.current_job_location,
+#                         'preferred_job_location': candidate.preferred_job_location,
+#                         'qualifications': candidate.qualifications,
+#                         'experience': candidate.experience,
+#                         'relevant_experience': candidate.relevant_experience,
+#                         'current_ctc': candidate.current_ctc,
+#                         'expected_ctc': candidate.expected_ctc,
+#                         'notice_period': candidate.notice_period,
+#                         'linkedin_url': candidate.linkedin_url,
+#                         'holding_offer': candidate.holding_offer,
+#                         'recruiter': candidate.recruiter,
+#                         'management': candidate.management,
+#                         'status': candidate.status,
+#                         'remarks': candidate.remarks,
+#                         'skills': candidate.skills,
+#                         'resume': candidate.resume,
+#                         'period_of_notice': candidate.period_of_notice if candidate.notice_period == 'no' else None,
+#                         'last_working_date': candidate.last_working_date if candidate.notice_period in {'yes', 'completed'} else None,
+#                         'buyout': candidate.buyout,
+#                         'date_created':candidate.date_created,
+#                         'time_created':candidate.time_created
+            
+#                         # Add more attributes as needed
+#                     } for candidate in candidates],
+#                     'jobs': [{
+#                         'id': job.id,
+#                         'client': job.client,
+#                         'experience_min': job.experience_min,
+#                         'experience_max': job.experience_max,
+#                         'budget_min': job.budget_min,
+#                         'budget_max': job.budget_max,
+#                         'location': job.location,
+#                         'shift_timings': job.shift_timings,
+#                         'notice_period': job.notice_period,
+#                         'role': job.role,
+#                         'detailed_jd': job.detailed_jd,
+#                         'jd_pdf': job.jd_pdf,
+#                         'mode': job.mode,
+#                         'recruiter': job.recruiter,
+#                         'management': job.management,
+#                         'date_created': job.date_created,
+#                         'time_created': job.time_created,
+#                         'job_status': job.job_status,
+#                         'job_type': job.job_type,
+#                         'skills': job.skills,
+#                         'notification': job.notification
+#                         # Add more attributes as needed
+#                     } for job in jobs],
+#                     'edit_candidate_message': edit_candidate_message,
+#                     'page_no': page_no,
+#                     'count_notification_no': count_notification_no,
+#                     'career_count_notification_no': career_count_notification_no
+#                 }
+#         elif user_type == 'management':
+#             users = User.query.all()
+#             candidates = Candidate.query.filter(Candidate.reference.is_(None)).all()
+#             candidates = sorted(candidates, key=lambda candidate: candidate.id)
+#             jobs = JobPost.query.all()
+#             response_data = {
+#                 'users': [{
+#                     'id': user.id,
+#                     'name': user.name,
+#                     'user_type': user.user_type,
+#                     'email': user.email
+                     
+#                     # Add more attributes as needed
+#                 } for user in users],
+#                 'user_type': user_type,
+#                 'user_name': user_name,
+#                 'candidates': [{
+#                         'id': candidate.id,
+#                         'job_id': candidate.job_id,
+#                         'name': candidate.name,
+#                         'mobile': candidate.mobile,
+#                         'email': candidate.email,
+#                         'client': candidate.client,
+#                         'current_company': candidate.current_company,
+#                         'position': candidate.position,
+#                         'profile': candidate.profile,
+#                         'current_job_location': candidate.current_job_location,
+#                         'preferred_job_location': candidate.preferred_job_location,
+#                         'qualifications': candidate.qualifications,
+#                         'experience': candidate.experience,
+#                         'relevant_experience': candidate.relevant_experience,
+#                         'current_ctc': candidate.current_ctc,
+#                         'expected_ctc': candidate.expected_ctc,
+#                         'notice_period': candidate.notice_period,
+#                         'linkedin_url': candidate.linkedin_url,
+#                         'holding_offer': candidate.holding_offer,
+#                         'recruiter': candidate.recruiter,
+#                         'management': candidate.management,
+#                         'status': candidate.status,
+#                         'remarks': candidate.remarks,
+#                         'skills': candidate.skills,
+#                         'resume': candidate.resume,
+#                         'period_of_notice': candidate.period_of_notice if candidate.notice_period == 'no' else None,
+#                         'last_working_date': candidate.last_working_date if candidate.notice_period in {'yes', 'completed'} else None,
+#                         'buyout': candidate.buyout,
+#                         'date_created':candidate.date_created,
+#                         'time_created':candidate.time_created
+#                     # Add more attributes as needed
+#                 } for candidate in candidates],
+#                 'jobs': [{
+#                     'id': job.id,
+#                     'client': job.client,
+#                     'experience_min': job.experience_min,
+#                     'experience_max': job.experience_max,
+#                     'budget_min': job.budget_min,
+#                     'budget_max': job.budget_max,
+#                     'location': job.location,
+#                     'shift_timings': job.shift_timings,
+#                     'notice_period': job.notice_period,
+#                     'role': job.role,
+#                     'detailed_jd': job.detailed_jd,
+#                     'jd_pdf': job.jd_pdf,
+#                     'mode': job.mode,
+#                     'recruiter': job.recruiter,
+#                     'management': job.management,
+#                     'date_created': job.date_created,
+#                     'time_created': job.time_created,
+#                     'job_status': job.job_status,
+#                     'job_type': job.job_type,
+#                     'skills': job.skills,
+#                     'notification': job.notification
+#                     # Add more attributes as needed
+#                 } for job in jobs],
+#                 'signup_message': signup_message,
+#                 'job_message': job_message,
+#                 'page_no': page_no,
+#                 'edit_candidate_message': edit_candidate_message
+#             }
+#         else:
+#             user = User.query.filter_by(id=user_id).first()
+#             if user:
+#                 candidates = Candidate.query.filter_by(recruiter=user.name).all()  # Filter candidates by user's name
+#                 response_data = {
+#                     'user': {
+#                         'id': user.id,
+#                         'name': user.name,
+#                         'user_type': user.user_type,
+#                         'email': user.email
+#                         # Add more attributes as needed
+#                     },
+#                     'user_type': user_type,
+#                     'user_name': user_name,
+#                     'candidates': [{
+#                         'id': candidate.id,
+#                         'job_id':candidate.job_id,
+#                         'name': candidate.name,
+#                         'email': candidate.email,
+#                         'mobile': candidate.mobile,
+#                         'client':candidate.client,
+#                         'skills':candidate.skills,
+#                         "profile": candidate.profile, 
+#                         'recruiter':candidate.recruiter,
+#                         "management":candidate.management,
+#                         'resume': candidate.resume,
+#                         'current_company': candidate.current_company,
+#                         'position': candidate.position,
+#                         'current_job_location': candidate.current_job_location,
+#                         'preferred_job_location': candidate.preferred_job_location,
+#                         'qualifications':candidate.qualifications,
+#                         'experience': candidate.experience,
+#                         'relevant_experience':candidate.relevant_experience,
+#                         'current_ctc':candidate.current_ctc,
+#                         'experted_ctc': candidate.expected_ctc,
+#                         "total":candidate.total,
+#                         'package_in_lpa':candidate.package_in_lpa,
+#                         'holding_offer':candidate.holding_offer,
+#                         'status': candidate.status,
+#                         'reason_for_job_change':candidate.reason_for_job_change,
+#                         'remarks':candidate.remarks,
+#                         'screening_done': candidate.screening_done,
+#                         'rejected_at_screening': candidate.rejected_at_screening,
+#                         'l1_cleared':candidate.l1_cleared,
+#                         'rejected_at_l1':candidate.rejected_at_l1,
+#                         "dropped_after_clearing_l1": candidate.dropped_after_clearing_l1,
+#                         'l2_cleared':candidate.l1_cleared,
+#                         'rejected_at_l2':candidate.rejected_at_l1,
+#                         "dropped_after_clearing_l2": candidate.dropped_after_clearing_l1,
+#                         'onboarded': candidate.onboarded,
+#                         'dropped_after_onboarding': candidate.dropped_after_onboarding,
+#                         'linkedin_url': candidate.linkedin_url,
+#                         'period_of_notice': candidate.period_of_notice,
+#                         'reference': candidate.reference,
+#                         'reference_name': candidate.reference_name,
+#                         'reference_position': candidate.reference_position,
+#                         'reference_information': candidate.reference_information,
+#                         'comments':candidate.comments,
+#                         "time_created":str(candidate.time_created),
+#                         "date_created": str(candidate.date_created)
+#                         # Add more attributes as needed
+#                     } for candidate in candidates],
+#                 }
+#     else:
+#         response_data = {"message": "User ID or User Type missing"}
+#     # Convert date objects to string representations before returning the response
+#     for job in response_data.get('jobs', []):
+#         if job.get('date_created'):
+#             job['date_created'] = job['date_created'].isoformat()
+#     # Convert response_data to JSON string
+#     response_json = json.dumps(response_data)
+
+#     # Create the response
+#     return Response(response_json, content_type='application/json')
+#     # return Response(json.dumps(response_data, default=str), content_type='application/json')
+
+# @app.route('/dashboard', methods=['POST'])
+# def dashboard():
+#     data = request.json
+#     print(data)  # Just to verify if data is received properly
+
+#     edit_candidate_message = data.get('edit_candidate_message')
+#     page_no = data.get('page_no')
+#     candidate_message = data.get('candidate_message')
+#     signup_message = data.get('signup_message')
+#     job_message = data.get('job_message')
+#     update_candidate_message = data.get('update_candidate_message')
+#     delete_message = data.get("delete_message")
+
+#     # data = request.json
+#     user_id = data['user_id']
+#     user = User.query.filter_by(id=user_id).first()
+#     print("user :",user)
+#     user_type = user.user_type
+#     print("user_type :",user_type)
+#     user_name = user.username
+
+#     response_data = {}
+
+#     if user_id and user_type:
+#         if user_type == 'recruiter':
+#             recruiter = User.query.filter_by(id=user_id, user_type='recruiter').first()
+#             if recruiter:
+#                 candidates = Candidate.query.filter(and_(Candidate.recruiter == recruiter.name, Candidate.reference.is_(None))).all()  # Filter candidates by recruiter's name
+#                 candidates = sorted(candidates, key=lambda candidate: candidate.id)
+#                 jobs = JobPost.query.filter_by(recruiter=user_name).all()  # Filter jobs by recruiter's name
+#                 count_notification_no = Notification.query.filter(Notification.notification_status == 'false',
+#                                                                   Notification.recruiter_name == user_name).count()
+#                 career_count_notification_no = Career_notification.query.filter(Career_notification.notification_status == 'false',
+#                                                                   Career_notification.recruiter_name == user_name).count()
+#                 response_data = {
+#                     'user': {
+#                         'id': recruiter.id,
+#                         'name': recruiter.name,
+#                         'user_type': recruiter.user_type,
+#                         'email': recruiter.email
+#                         # Add more attributes as needed
+#                     },
+#                     'user_type': user_type,
+#                     'user_name': user_name,
+#                     'candidates': [{
+#                         'id': candidate.id,
+#                         'job_id': candidate.job_id,
+#                         'name': candidate.name,
+#                         'mobile': candidate.mobile,
+#                         'email': candidate.email,
+#                         'client': candidate.client,
+#                         'current_company': candidate.current_company,
+#                         'position': candidate.position,
+#                         'profile': candidate.profile,
+#                         'current_job_location': candidate.current_job_location,
+#                         'preferred_job_location': candidate.preferred_job_location,
+#                         'qualifications': candidate.qualifications,
+#                         'experience': candidate.experience,
+#                         'relevant_experience': candidate.relevant_experience,
+#                         'current_ctc': candidate.current_ctc,
+#                         'expected_ctc': candidate.expected_ctc,
+#                         'notice_period': candidate.notice_period,
+#                         'linkedin_url': candidate.linkedin_url,
+#                         'holding_offer': candidate.holding_offer,
+#                         'recruiter': candidate.recruiter,
+#                         'management': candidate.management,
+#                         'status': candidate.status,
+#                         'remarks': candidate.remarks,
+#                         'skills': candidate.skills,
+#                         'resume': candidate.resume,
+#                         'period_of_notice': candidate.period_of_notice if candidate.notice_period == 'no' else None,
+#                         'last_working_date': candidate.last_working_date if candidate.notice_period in {'yes', 'completed'} else None,
+#                         'buyout': candidate.buyout,
+#                         'date_created':candidate.date_created,
+#                         'time_created':candidate.time_created
 
             
-                        # Add more attributes as needed
-                    } for candidate in candidates],
-                    'jobs': [{
-                        'id': job.id,
-                        'client': job.client,
-                        'experience_min': job.experience_min,
-                        'experience_max': job.experience_max,
-                        'budget_min': job.budget_min,
-                        'budget_max': job.budget_max,
-                        'location': job.location,
-                        'shift_timings': job.shift_timings,
-                        'notice_period': job.notice_period,
-                        'role': job.role,
-                        'detailed_jd': job.detailed_jd,
-                        'jd_pdf': job.jd_pdf,
-                        'mode': job.mode,
-                        'recruiter': job.recruiter,
-                        'management': job.management,
-                        'date_created': job.date_created,
-                        'time_created': job.time_created,
-                        'job_status': job.job_status,
-                        'job_type': job.job_type,
-                        'skills': job.skills,
-                        'notification': job.notification
-                        # Add more attributes as needed
-                    } for job in jobs],
-                    'edit_candidate_message': edit_candidate_message,
-                    'page_no': page_no,
-                    'count_notification_no': count_notification_no,
-                    'career_count_notification_no': career_count_notification_no
-                }
-        elif user_type == 'management':
-            users = User.query.all()
-            candidates = Candidate.query.filter(Candidate.reference.is_(None)).all()
-            candidates = sorted(candidates, key=lambda candidate: candidate.id)
-            jobs = JobPost.query.all()
-            response_data = {
-                'users': [{
-                    'id': user.id,
-                    'name': user.name,
-                    'user_type': user.user_type,
-                    'email': user.email
+#                         # Add more attributes as needed
+#                     } for candidate in candidates],
+#                     'jobs': [{
+#                         'id': job.id,
+#                         'client': job.client,
+#                         'experience_min': job.experience_min,
+#                         'experience_max': job.experience_max,
+#                         'budget_min': job.budget_min,
+#                         'budget_max': job.budget_max,
+#                         'location': job.location,
+#                         'shift_timings': job.shift_timings,
+#                         'notice_period': job.notice_period,
+#                         'role': job.role,
+#                         'detailed_jd': job.detailed_jd,
+#                         'jd_pdf': job.jd_pdf,
+#                         'mode': job.mode,
+#                         'recruiter': job.recruiter,
+#                         'management': job.management,
+#                         'date_created': job.date_created,
+#                         'time_created': job.time_created,
+#                         'job_status': job.job_status,
+#                         'job_type': job.job_type,
+#                         'skills': job.skills,
+#                         'notification': job.notification
+#                         # Add more attributes as needed
+#                     } for job in jobs],
+#                     'edit_candidate_message': edit_candidate_message,
+#                     'page_no': page_no,
+#                     'count_notification_no': count_notification_no,
+#                     'career_count_notification_no': career_count_notification_no
+#                 }
+#         elif user_type == 'management':
+#             users = User.query.all()
+#             candidates = Candidate.query.filter(Candidate.reference.is_(None)).all()
+#             candidates = sorted(candidates, key=lambda candidate: candidate.id)
+#             jobs = JobPost.query.all()
+#             response_data = {
+#                 'users': [{
+#                     'id': user.id,
+#                     'name': user.name,
+#                     'user_type': user.user_type,
+#                     'email': user.email
                      
-                    # Add more attributes as needed
-                } for user in users],
-                'user_type': user_type,
-                'user_name': user_name,
-                'candidates': [{
-                        'id': candidate.id,
-                        'job_id': candidate.job_id,
-                        'name': candidate.name,
-                        'mobile': candidate.mobile,
-                        'email': candidate.email,
-                        'client': candidate.client,
-                        'current_company': candidate.current_company,
-                        'position': candidate.position,
-                        'profile': candidate.profile,
-                        'current_job_location': candidate.current_job_location,
-                        'preferred_job_location': candidate.preferred_job_location,
-                        'qualifications': candidate.qualifications,
-                        'experience': candidate.experience,
-                        'relevant_experience': candidate.relevant_experience,
-                        'current_ctc': candidate.current_ctc,
-                        'expected_ctc': candidate.expected_ctc,
-                        'notice_period': candidate.notice_period,
-                        'linkedin_url': candidate.linkedin_url,
-                        'holding_offer': candidate.holding_offer,
-                        'recruiter': candidate.recruiter,
-                        'management': candidate.management,
-                        'status': candidate.status,
-                        'remarks': candidate.remarks,
-                        'skills': candidate.skills,
-                        'resume': candidate.resume,
-                        'period_of_notice': candidate.period_of_notice if candidate.notice_period == 'no' else None,
-                        'last_working_date': candidate.last_working_date if candidate.notice_period in {'yes', 'completed'} else None,
-                        'buyout': candidate.buyout,
-                        'date_created':candidate.date_created,
-                        'time_created':candidate.time_created
+#                     # Add more attributes as needed
+#                 } for user in users],
+#                 'user_type': user_type,
+#                 'user_name': user_name,
+#                 'candidates': [{
+#                         'id': candidate.id,
+#                         'job_id': candidate.job_id,
+#                         'name': candidate.name,
+#                         'mobile': candidate.mobile,
+#                         'email': candidate.email,
+#                         'client': candidate.client,
+#                         'current_company': candidate.current_company,
+#                         'position': candidate.position,
+#                         'profile': candidate.profile,
+#                         'current_job_location': candidate.current_job_location,
+#                         'preferred_job_location': candidate.preferred_job_location,
+#                         'qualifications': candidate.qualifications,
+#                         'experience': candidate.experience,
+#                         'relevant_experience': candidate.relevant_experience,
+#                         'current_ctc': candidate.current_ctc,
+#                         'expected_ctc': candidate.expected_ctc,
+#                         'notice_period': candidate.notice_period,
+#                         'linkedin_url': candidate.linkedin_url,
+#                         'holding_offer': candidate.holding_offer,
+#                         'recruiter': candidate.recruiter,
+#                         'management': candidate.management,
+#                         'status': candidate.status,
+#                         'remarks': candidate.remarks,
+#                         'skills': candidate.skills,
+#                         'resume': candidate.resume,
+#                         'period_of_notice': candidate.period_of_notice if candidate.notice_period == 'no' else None,
+#                         'last_working_date': candidate.last_working_date if candidate.notice_period in {'yes', 'completed'} else None,
+#                         'buyout': candidate.buyout,
+#                         'date_created':candidate.date_created,
+#                         'time_created':candidate.time_created
 
-                    # Add more attributes as needed
-                } for candidate in candidates],
-                'jobs': [{
-                    'id': job.id,
-                    'client': job.client,
-                    'experience_min': job.experience_min,
-                    'experience_max': job.experience_max,
-                    'budget_min': job.budget_min,
-                    'budget_max': job.budget_max,
-                    'location': job.location,
-                    'shift_timings': job.shift_timings,
-                    'notice_period': job.notice_period,
-                    'role': job.role,
-                    'detailed_jd': job.detailed_jd,
-                    'jd_pdf': job.jd_pdf,
-                    'mode': job.mode,
-                    'recruiter': job.recruiter,
-                    'management': job.management,
-                    'date_created': job.date_created,
-                    'time_created': job.time_created,
-                    'job_status': job.job_status,
-                    'job_type': job.job_type,
-                    'skills': job.skills,
-                    'notification': job.notification
-                    # Add more attributes as needed
-                } for job in jobs],
-                'signup_message': signup_message,
-                'job_message': job_message,
-                'page_no': page_no,
-                'edit_candidate_message': edit_candidate_message
-            }
-        else:
-            user = User.query.filter_by(id=user_id).first()
-            if user:
-                candidates = Candidate.query.filter_by(recruiter=user.name).all()  # Filter candidates by user's name
-                response_data = {
-                    'user': {
-                        'id': user.id,
-                        'name': user.name,
-                        'user_type': user.user_type,
-                        'email': user.email
-                        # Add more attributes as needed
-                    },
-                    'user_type': user_type,
-                    'user_name': user_name,
-                    'candidates': [{
-                        'id': candidate.id,
-                        'job_id':candidate.job_id,
-                        'name': candidate.name,
-                        'email': candidate.email,
-                        'mobile': candidate.mobile,
-                        'client':candidate.client,
-                        'skills':candidate.skills,
-                        "profile": candidate.profile, 
-                        'recruiter':candidate.recruiter,
-                        "management":candidate.management,
-                        'resume': candidate.resume,
-                        'current_company': candidate.current_company,
-                        'position': candidate.position,
-                        'current_job_location': candidate.current_job_location,
-                        'preferred_job_location': candidate.preferred_job_location,
-                        'qualifications':candidate.qualifications,
-                        'experience': candidate.experience,
-                        'relevant_experience':candidate.relevant_experience,
-                        'current_ctc':candidate.current_ctc,
-                        'experted_ctc': candidate.expected_ctc,
-                        "total":candidate.total,
-                        'package_in_lpa':candidate.package_in_lpa,
-                        'holding_offer':candidate.holding_offer,
-                        'status': candidate.status,
-                        'reason_for_job_change':candidate.reason_for_job_change,
-                        'remarks':candidate.remarks,
-                        'screening_done': candidate.screening_done,
-                        'rejected_at_screening': candidate.rejected_at_screening,
-                        'l1_cleared':candidate.l1_cleared,
-                        'rejected_at_l1':candidate.rejected_at_l1,
-                        "dropped_after_clearing_l1": candidate.dropped_after_clearing_l1,
-                        'l2_cleared':candidate.l1_cleared,
-                        'rejected_at_l2':candidate.rejected_at_l1,
-                        "dropped_after_clearing_l2": candidate.dropped_after_clearing_l1,
-                        'onboarded': candidate.onboarded,
-                        'dropped_after_onboarding': candidate.dropped_after_onboarding,
-                        'linkedin_url': candidate.linkedin_url,
-                        'period_of_notice': candidate.period_of_notice,
-                        'reference': candidate.reference,
-                        'reference_name': candidate.reference_name,
-                        'reference_position': candidate.reference_position,
-                        'reference_information': candidate.reference_information,
-                        'comments':candidate.comments,
-                        "time_created":str(candidate.time_created),
-                        "date_created": str(candidate.date_created)
-                        # Add more attributes as needed
-                    } for candidate in candidates],
-                }
-    else:
-        response_data = {"message": "User ID or User Type missing"}
+#                     # Add more attributes as needed
+#                 } for candidate in candidates],
+#                 'jobs': [{
+#                     'id': job.id,
+#                     'client': job.client,
+#                     'experience_min': job.experience_min,
+#                     'experience_max': job.experience_max,
+#                     'budget_min': job.budget_min,
+#                     'budget_max': job.budget_max,
+#                     'location': job.location,
+#                     'shift_timings': job.shift_timings,
+#                     'notice_period': job.notice_period,
+#                     'role': job.role,
+#                     'detailed_jd': job.detailed_jd,
+#                     'jd_pdf': job.jd_pdf,
+#                     'mode': job.mode,
+#                     'recruiter': job.recruiter,
+#                     'management': job.management,
+#                     'date_created': job.date_created,
+#                     'time_created': job.time_created,
+#                     'job_status': job.job_status,
+#                     'job_type': job.job_type,
+#                     'skills': job.skills,
+#                     'notification': job.notification
+#                     # Add more attributes as needed
+#                 } for job in jobs],
+#                 'signup_message': signup_message,
+#                 'job_message': job_message,
+#                 'page_no': page_no,
+#                 'edit_candidate_message': edit_candidate_message
+#             }
+#         else:
+#             user = User.query.filter_by(id=user_id).first()
+#             if user:
+#                 candidates = Candidate.query.filter_by(recruiter=user.name).all()  # Filter candidates by user's name
+#                 response_data = {
+#                     'user': {
+#                         'id': user.id,
+#                         'name': user.name,
+#                         'user_type': user.user_type,
+#                         'email': user.email
+#                         # Add more attributes as needed
+#                     },
+#                     'user_type': user_type,
+#                     'user_name': user_name,
+#                     'candidates': [{
+#                         'id': candidate.id,
+#                         'job_id':candidate.job_id,
+#                         'name': candidate.name,
+#                         'email': candidate.email,
+#                         'mobile': candidate.mobile,
+#                         'client':candidate.client,
+#                         'skills':candidate.skills,
+#                         "profile": candidate.profile, 
+#                         'recruiter':candidate.recruiter,
+#                         "management":candidate.management,
+#                         'resume': candidate.resume,
+#                         'current_company': candidate.current_company,
+#                         'position': candidate.position,
+#                         'current_job_location': candidate.current_job_location,
+#                         'preferred_job_location': candidate.preferred_job_location,
+#                         'qualifications':candidate.qualifications,
+#                         'experience': candidate.experience,
+#                         'relevant_experience':candidate.relevant_experience,
+#                         'current_ctc':candidate.current_ctc,
+#                         'experted_ctc': candidate.expected_ctc,
+#                         "total":candidate.total,
+#                         'package_in_lpa':candidate.package_in_lpa,
+#                         'holding_offer':candidate.holding_offer,
+#                         'status': candidate.status,
+#                         'reason_for_job_change':candidate.reason_for_job_change,
+#                         'remarks':candidate.remarks,
+#                         'screening_done': candidate.screening_done,
+#                         'rejected_at_screening': candidate.rejected_at_screening,
+#                         'l1_cleared':candidate.l1_cleared,
+#                         'rejected_at_l1':candidate.rejected_at_l1,
+#                         "dropped_after_clearing_l1": candidate.dropped_after_clearing_l1,
+#                         'l2_cleared':candidate.l1_cleared,
+#                         'rejected_at_l2':candidate.rejected_at_l1,
+#                         "dropped_after_clearing_l2": candidate.dropped_after_clearing_l1,
+#                         'onboarded': candidate.onboarded,
+#                         'dropped_after_onboarding': candidate.dropped_after_onboarding,
+#                         'linkedin_url': candidate.linkedin_url,
+#                         'period_of_notice': candidate.period_of_notice,
+#                         'reference': candidate.reference,
+#                         'reference_name': candidate.reference_name,
+#                         'reference_position': candidate.reference_position,
+#                         'reference_information': candidate.reference_information,
+#                         'comments':candidate.comments,
+#                         "time_created":str(candidate.time_created),
+#                         "date_created": str(candidate.date_created)
+#                         # Add more attributes as needed
+#                     } for candidate in candidates],
+#                 }
+#     else:
+#         response_data = {"message": "User ID or User Type missing"}
 
-    # Convert date objects to string representations before returning the response
-    # for job in response_data.get('jobs', []):
-    #     job['date_created'] = job['date_created'].isoformat()
+#     # # Convert date objects to string representations before returning the response
+#     # for job in response_data.get('jobs', []):
+#     #     job['date_created'] = job['date_created'].isoformat()
 
-    return Response(json.dumps(response_data, default=str), content_type='application/json')
+#     return Response(json.dumps(response_data, default=str), content_type='application/json')
 
 
 # Mocked function for demonstration
@@ -1111,6 +3443,10 @@ def add_candidate():
         position = data.get('position')
         current_job_location = data.get('current_job_location')
         preferred_job_location = data.get('preferred_job_location')
+        
+        # notice_period = data.get('notice_period')  # yes no completed
+        # period_of_notice = data.get('period_of_notice')
+        
         qualifications = data.get('qualifications')
         experience = data.get('experience')
         experience_months=data.get('experience')
@@ -1120,24 +3456,57 @@ def add_candidate():
         current_ctc = data.get('current_ctc')
         expected_ctc = data.get('expected_ctc')
         linkedin = data.get('linkedin')
-        notice_period = data.get('notice_period')
-        holding_offer = data.get('holding_offer')
-        resume = data.get('resume')
-        print("Resume : ",type(resume))
-
-
         
+        resume = data.get('resume')
+        resume_binary = base64.b64decode(resume)
+        print("Resume : ",type(resume_binary))
+
+        # Set jd_pdf_present based on the presence of jd_pdf
+        if resume_binary is not None:
+            resume_present = True
+        else:
+            resume_present = False
+
+        notice_period = data.get('serving_notice_period')
+        last_working_date = None
+        buyout = False
+        period_of_notice = None
+        if notice_period == 'yes':
+            last_working_date=data.get('last_working_date')
+            buyout=data.get('buyout')
+        elif notice_period == 'no':
+            period_of_notice = data.get('period_of_notice')
+            buyout=data.get('buyout')
+        # elif notice_period == 'completed':
+        #     last_working_date=data.get('last_working_date')
+
+        holding_offer = data.get('holding_offer')
+        if holding_offer == 'yes':
+            total_offers=data.get('total_offers')
+            if total_offers == '':
+                total_offers = 0
+            else:
+                total_offers=data.get('total_offers')
+            highest_package_lpa=data.get('highest_package')
+            if highest_package_lpa == '':
+                highest_package_lpa = 0
+            else:
+                highest_package_lpa=data.get('highest_package')
+        else:
+            total_offers = None
+            highest_package_lpa = None
 
         # # Check if the user is logged in
         if request.method == 'POST':
-              
             # Retrieve the recruiter and management names based on user type
             if user_type == 'recruiter':
-                recruiter = User.query.get(user_id).name
+                # recruiter = User.query.get(user_id).name
+                recruiter=user_name
                 management = None
             elif user_type == 'management':
                 recruiter = None
-                management = User.query.get(user_id).name
+                # management = User.query.get(user_id).name
+                management=user_name
             else:
                 recruiter = None
                 management = None
@@ -1145,7 +3514,7 @@ def add_candidate():
             # Check if the job_id is provided and job is active
             matching_job_post = JobPost.query.filter(and_(JobPost.id == job_id, JobPost.job_status == 'Active')).first()
             if not matching_job_post:
-                return jsonify({"error_message": "Job on hold"})
+                return jsonify({'status': 'error',"message": "Job on hold"})
 
             # Create new candidate object
             new_candidate = Candidate(
@@ -1165,35 +3534,281 @@ def add_candidate():
                 relevant_experience=relevant_experience,
                 current_ctc=current_ctc,
                 expected_ctc=expected_ctc,
-                notice_period=notice_period,
                 linkedin_url=linkedin,
                 holding_offer=holding_offer,
                 recruiter=recruiter,
                 management=management,
-                status='None',
+                status='SCREENING',
                 remarks=data.get('remarks'),
                 skills=skills,
-                resume=resume,
-                period_of_notice=data.get('months') if notice_period == 'no' else None,
-                last_working_date=data.get('last_working_date') if notice_period in {'yes', 'completed'} else None,
-                buyout='buyout' in data
+                resume=resume_binary,
+                # serving_notice_period=serving_notice_period,
+                notice_period=notice_period,
+                period_of_notice=period_of_notice,
+                # last_working_date=data.get('last_working_date') if notice_period in {'yes', 'completed'} else None,
+                last_working_date=last_working_date,
+                buyout=buyout,
+                package_in_lpa=highest_package_lpa,
+                total=total_offers,
+                resume_present=resume_present
+                # buyout='buyout' in data
             )
 
-            new_candidate.date_created = date.today()
-            new_candidate.time_created = datetime.now().time()
+            print("Hello !!")
+            
+            # new_candidate.date_created = date.today()
+            # new_candidate.time_created = datetime.now().time()
+    
+            # Created data and time
+            current_datetime = datetime.now(pytz.timezone('Asia/Kolkata'))
+            new_candidate.date_created = current_datetime.date()
+            new_candidate.time_created = current_datetime.time()
+
 
             db.session.add(new_candidate)
             db.session.commit()
 
-            return jsonify({"message": "Candidate Added Successfully", "candidate_id": new_candidate.id})
+            return jsonify({'status': 'success',"message": "Candidate Added Successfully", "candidate_id": new_candidate.id})
 
         return jsonify({"error_message": "Method not found"})
 
     except Exception as e:
-        return jsonify({"error_message": str(e)}),500
+        print(e)
+        return jsonify({'status': 'error',"message": "Candidate unable to add"})
+        
+
+# @app.route('/add_candidate', methods=['POST'])
+# def add_candidate():
+#     try:
+        
+#         # Retrieve request data from JSON
+#         data = request.json
+#         user_id = data['user_id']
+#         user = User.query.filter_by(id=user_id).first()
+#         user_type = user.user_type
+#         user_name = user.username
+
+#         job_id = data.get('job_id')
+#         client = data.get('client')
+#         name = data.get('name')
+#         mobile = data.get('mobile')
+#         email = data.get('email')
+#         profile = data.get('profile')
+#         skills = data.get('skills')
+#         current_company = data.get('current_company')
+#         position = data.get('position')
+#         current_job_location = data.get('current_job_location')
+#         preferred_job_location = data.get('preferred_job_location')
+#         qualifications = data.get('qualifications')
+#         experience = data.get('experience')
+#         experience_months=data.get('experience')
+#         relevant_experience = data.get('relevant_experience')
+#         relevant_experience_months=data.get('relevant_experience_months')
+#         reason_for_job_change=data.get('reason_for_job_change')
+#         current_ctc = data.get('current_ctc')
+#         expected_ctc = data.get('expected_ctc')
+#         linkedin = data.get('linkedin')
+#         serving_notice_period = data.get('serving_notice_period')
+#         notice_period = data.get('notice_period')
+#         holding_offer = data.get('holding_offer')
+#         buyout=data.get('buyout')
+#         last_working_date=data.get('last_working_date')
+#         total_offers=data.get('total_offers')
+#         highest_package_lpa=data.get('highest_package')
+#         resume = data.get('resume')
+#         resume_binary = base64.b64decode(resume)
+#         print("Resume : ",type(resume_binary))
+
+#         # Set jd_pdf_present based on the presence of jd_pdf
+#         if resume_binary is not None:
+#             resume_present = True
+#         else:
+#             resume_present = False
+
+#         # # Check if the user is logged in
+#         if request.method == 'POST':
+#             # Retrieve the recruiter and management names based on user type
+#             if user_type == 'recruiter':
+#                 # recruiter = User.query.get(user_id).name
+#                 recruiter=user_name
+#                 management = None
+#             elif user_type == 'management':
+#                 recruiter = None
+#                 # management = User.query.get(user_id).name
+#                 management=user_name
+#             else:
+#                 recruiter = None
+#                 management = None
+
+#             # Check if the job_id is provided and job is active
+#             matching_job_post = JobPost.query.filter(and_(JobPost.id == job_id, JobPost.job_status == 'Active')).first()
+#             if not matching_job_post:
+#                 return jsonify({'status': 'error',"message": "Job on hold"})
+
+#             # Create new candidate object
+#             new_candidate = Candidate(
+#                 user_id=user_id,
+#                 job_id=job_id,
+#                 name=name,
+#                 mobile=mobile,
+#                 email=email,
+#                 client=client,
+#                 current_company=current_company,
+#                 position=position,
+#                 profile=profile,
+#                 current_job_location=current_job_location,
+#                 preferred_job_location=preferred_job_location,
+#                 qualifications=qualifications,
+#                 experience=experience,
+#                 relevant_experience=relevant_experience,
+#                 current_ctc=current_ctc,
+#                 expected_ctc=expected_ctc,
+#                 linkedin_url=linkedin,
+#                 holding_offer=holding_offer,
+#                 recruiter=recruiter,
+#                 management=management,
+#                 status='SCREENING',
+#                 remarks=data.get('remarks'),
+#                 skills=skills,
+#                 resume=resume_binary,
+#                 serving_notice_period=serving_notice_period,
+#                 period_of_notice=notice_period,
+#                 # last_working_date=data.get('last_working_date') if notice_period in {'yes', 'completed'} else None,
+#                 last_working_date=last_working_date,
+#                 buyout=buyout,
+#                 package_in_lpa=highest_package_lpa,
+#                 total=total_offers,
+#                 resume_present=resume_present
+#                 # buyout='buyout' in data
+#             )
+
+#             print("Hello !!")
+            
+#             # new_candidate.date_created = date.today()
+#             # new_candidate.time_created = datetime.now().time()
+    
+#             # Created data and time
+#             current_datetime = datetime.now(pytz.timezone('Asia/Kolkata'))
+#             new_candidate.date_created = current_datetime.date()
+#             new_candidate.time_created = current_datetime.time()
+
+
+#             db.session.add(new_candidate)
+#             db.session.commit()
+
+#             return jsonify({'status': 'success',"message": "Candidate Added Successfully", "candidate_id": new_candidate.id})
+
+#         return jsonify({"error_message": "Method not found"})
+
+#     except Exception as e:
+#         print(e)
+#         return jsonify({'status': 'error',"message": "Candidate unable to add"})
         
         
-from flask import jsonify
+        
+# from flask import jsonify
+# @app.route('/add_candidate', methods=['POST'])
+# def add_candidate():
+#     try:
+        
+#         # Retrieve request data from JSON
+#         data = request.json
+#         user_id = data['user_id']
+#         user = User.query.filter_by(id=user_id).first()
+#         user_type = user.user_type
+#         user_name = user.username
+
+#         job_id = data.get('job_id')
+#         client = data.get('client')
+#         name = data.get('name')
+#         mobile = data.get('mobile')
+#         email = data.get('email')
+#         profile = data.get('profile')
+#         skills = data.get('skills')
+#         current_company = data.get('current_company')
+#         position = data.get('position')
+#         current_job_location = data.get('current_job_location')
+#         preferred_job_location = data.get('preferred_job_location')
+#         qualifications = data.get('qualifications')
+#         experience = data.get('experience')
+#         experience_months=data.get('experience')
+#         relevant_experience = data.get('relevant_experience')
+#         relevant_experience_months=data.get('relevant_experience_months')
+#         reason_for_job_change=data.get('reason_for_job_change')
+#         current_ctc = data.get('current_ctc')
+#         expected_ctc = data.get('expected_ctc')
+#         linkedin = data.get('linkedin')
+#         notice_period = data.get('notice_period')
+#         holding_offer = data.get('holding_offer')
+#         resume = data.get('resume')
+#         print("Resume : ",type(resume))
+
+
+        
+
+#         # # Check if the user is logged in
+#         if request.method == 'POST':
+              
+#             # Retrieve the recruiter and management names based on user type
+#             if user_type == 'recruiter':
+#                 recruiter = User.query.get(user_id).name
+#                 management = None
+#             elif user_type == 'management':
+#                 recruiter = None
+#                 management = User.query.get(user_id).name
+#             else:
+#                 recruiter = None
+#                 management = None
+
+#             # Check if the job_id is provided and job is active
+#             matching_job_post = JobPost.query.filter(and_(JobPost.id == job_id, JobPost.job_status == 'Active')).first()
+#             if not matching_job_post:
+#                 return jsonify({"error_message": "Job on hold"})
+
+#             # Create new candidate object
+#             new_candidate = Candidate(
+#                 user_id=user_id,
+#                 job_id=job_id,
+#                 name=name,
+#                 mobile=mobile,
+#                 email=email,
+#                 client=client,
+#                 current_company=current_company,
+#                 position=position,
+#                 profile=profile,
+#                 current_job_location=current_job_location,
+#                 preferred_job_location=preferred_job_location,
+#                 qualifications=qualifications,
+#                 experience=experience,
+#                 relevant_experience=relevant_experience,
+#                 current_ctc=current_ctc,
+#                 expected_ctc=expected_ctc,
+#                 notice_period=notice_period,
+#                 linkedin_url=linkedin,
+#                 holding_offer=holding_offer,
+#                 recruiter=recruiter,
+#                 management=management,
+#                 status='None',
+#                 remarks=data.get('remarks'),
+#                 skills=skills,
+#                 resume=resume,
+#                 period_of_notice=data.get('months') if notice_period == 'no' else None,
+#                 last_working_date=data.get('last_working_date') if notice_period in {'yes', 'completed'} else None,
+#                 buyout='buyout' in data
+#             )
+
+#             new_candidate.date_created = date.today()
+#             new_candidate.time_created = datetime.now().time()
+
+#             db.session.add(new_candidate)
+#             db.session.commit()
+
+#             return jsonify({"message": "Candidate Added Successfully", "candidate_id": new_candidate.id})
+
+#         return jsonify({"error_message": "Method not found"})
+
+#     except Exception as e:
+#         return jsonify({"error_message": str(e)}),500
 
 @app.route('/get_job_role', methods=['GET'])
 def get_job_role():
@@ -1234,7 +3849,7 @@ def delete_candidate(candidate_id):
                 Candidate.query.filter_by(id=candidate_id).delete()
                 db.session.commit()
 
-                return jsonify({"message": "Candidate details deleted successfully"})
+                return jsonify({'status': 'success',"message": "Candidate details deleted successfully"})
 
             return jsonify({
                 "candidate": {
@@ -1249,9 +3864,9 @@ def delete_candidate(candidate_id):
             })
 
         else:
-            return jsonify({"message": "Candidate not found"}), 404
+            return jsonify({'status': 'error',"message": "Candidate not found"}), 404
 
-    return jsonify({"message": "Unauthorized: Only management can delete candidates"}), 401
+    return jsonify({'status': 'error',"message": "Unauthorized: Only management can delete candidates"}), 401
 
 
 @app.route('/delete_candidate_recruiter/<int:candidate_id>', methods=["GET", "POST"])
@@ -1316,71 +3931,78 @@ def update_candidate(candidate_id):
     career_count_notification_no = Career_notification.query.filter(
         Career_notification.notification_status == 'false',
         Career_notification.recruiter_name == user_name).count()
-    if request.method == 'POST':
-        if user_type == 'recruiter':
-            recruiter = User.query.get(user_id).name
-            management = None
-        elif user_type == 'management':
-            recruiter = None
-            management = User.query.get(user_id).name
+    
+    if user_type == 'recruiter':
+        recruiter = User.query.get(user_id).name
+        management = None
+    elif user_type == 'management':
+        recruiter = None
+        management = User.query.get(user_id).name
+    else:
+        recruiter = None
+        management = None
+
+    if user_type == 'recruiter':
+        user_email = User.query.get(user_id).email
+        management_email = None
+    elif user_type == 'management':
+        user_email = None
+        management_email = User.query.get(user_id).email
+    else:
+        user_email = None
+        management_email = None
+
+    candidate = Candidate.query.filter_by(id=candidate_id).first()
+    if not candidate:
+        return jsonify({'status': 'error',"message": "Candidate not found"})
+    
+    previous_status = candidate.status
+
+    candidate_status = request.json.get('candidate_status')
+    candidate_comment = request.json.get('comments')
+
+    candidate.status = candidate_status
+    candidate.comments = candidate_comment
+
+    # Update data_updated_date and data_updated_time
+    # current_datetime = datetime.now(pytz.timezone('Asia/Kolkata'))
+    # candidate.data_updated_date = current_datetime.date()
+    # candidate.data_updated_time = current_datetime.time()
+
+    db.session.commit()
+
+    if candidate_status in [
+            "SCREENING", "SCREEN REJECTED", "NO SHOW", "DROP", "CANDIDATE HOLD", "OFFERED - DECLINED", "DUPLICATE", "SCREENING SELECTED",
+            "L1-SCHEDULE", "L1-FEEDBACK", "L1-SELECTED", "L1-REJECTED", "CANDIDATE RESCHEDULE", "PANEL RESCHEDULE", "L2-SCHEDULE", 
+            "L2-FEEDBACK", "L2-SELECTED", "L2-REJECTED", "HR-ROUND", "MANAGERIAL ROUND", "NEGOTIATION", "SELECTED", "OFFER-REJECTED",
+            "OFFER-DECLINED", "ON-BOARDED", "HOLD", "CANDIDATE NO-SHOW"
+            ]:
+        candidate_name = candidate.name
+        candidate_position = candidate.position
+        candidate_email = candidate.email
+
+        if candidate_position:
+            candidate_position = candidate_position.upper()
         else:
-            recruiter = None
-            management = None
-
-        if user_type == 'recruiter':
-            user_email = User.query.get(user_id).email
-            management_email = None
-        elif user_type == 'management':
-            user_email = None
-            management_email = User.query.get(user_id).email
-        else:
-            user_email = None
-            management_email = None
-
-        candidate = Candidate.query.filter_by(id=candidate_id).first()
-        print(candidate)
-        
-        previous_status = candidate.status
-
-        candidate_status = request.json.get('candidate_status')
-        candidate_comment = request.json.get('comments')
-
-        candidate.status = candidate_status
-        candidate.comments = candidate_comment
-
-        db.session.commit()
-
-        if candidate_status in [
-                "SCREENING", "SCREEN REJECTED", "NO SHOW", "DROP", "CANDIDATE HOLD", "OFFERED - DECLINED", "DUPLICATE", "SCREENING SELECTED",
-                "L1-SCHEDULE", "L1-FEEDBACK", "L1-SELECTED", "L1-REJECTED", "CANDIDATE RESCHEDULE", "PANEL RESCHEDULE", "L2-SCHEDULE", 
-                "L2-FEEDBACK", "L2-SELECTED", "L2-REJECTED", "HR-ROUND", "MANAGERIAL ROUND", "NEGOTIATION", "SELECTED", "OFFER-REJECTED",
-                "OFFER-DECLINED", "ON-BOARDED", "HOLD", "CANDIDATE NO-SHOW"
-                ]:
-            candidate_name = candidate.name
-            candidate_position = candidate.position
-            candidate_email = candidate.email
-
-            if candidate_position:
-                candidate_position = candidate_position.upper()
-            else:
-                candidate_position = ""
-
-            if candidate.client:
-                client = candidate.client.upper()
-            else:
-                client = ""
-
-            if candidate_status in ["SCREENING", "SCREEN REJECTED"]:
-                message = f'Dear {candidate_name}, \n\nGreetings! \n\nWe hope this email finds you well. We wanted to extend our thanks for showing your interest in the {candidate_position} position and participating in the recruitment process. \n\nWe are writing to inform you about the latest update we received from our client {client} regarding your interview. \n\n        Current Status :  "{candidate_status}"\n\nThank you once again for considering this opportunity with us. We wish you all the best in your future endeavors. \n\nIf you have any questions or need further information, please feel free to reach out to us. \n\nThanks,\n'
-            else:
-                message = f'Dear {candidate_name}, \n\nGreetings! \n\nWe hope this email finds you well. We wanted to extend our thanks for showing your interest in the {candidate_position} position and participating in the recruitment process. \n\nWe are writing to inform you about the latest update we received from our client {client} regarding your interview. \n\n        Previous Status : "{previous_status}"\n\n        Current Status :  "{candidate_status}"\n\nThank you once again for considering this opportunity with us. We wish you all the best in your future endeavors. \n\nIf you have any questions or need further information, please feel free to reach out to us. \n\nThanks,\n'
-        else:
-            message = ""
-            candidate_name = ""
             candidate_position = ""
-            candidate_email = ""
 
-        return jsonify({
+        if candidate.client:
+            client = candidate.client.upper()
+        else:
+            client = ""
+
+        if candidate_status in ["SCREENING", "SCREEN REJECTED"]:
+            message = f'Dear {candidate_name}, \n\nGreetings! \n\nWe hope this email finds you well. We wanted to extend our thanks for showing your interest in the {candidate_position} position and participating in the recruitment process. \n\nWe are writing to inform you about the latest update we received from our client {client} regarding your interview. \n\n        Current Status :  "{candidate_status}"\n\nThank you once again for considering this opportunity with us. We wish you all the best in your future endeavors. \n\nIf you have any questions or need further information, please feel free to reach out to us. \n\nThanks,\n'
+        else:
+            message = f'Dear {candidate_name}, \n\nGreetings! \n\nWe hope this email finds you well. We wanted to extend our thanks for showing your interest in the {candidate_position} position and participating in the recruitment process. \n\nWe are writing to inform you about the latest update we received from our client {client} regarding your interview. \n\n        Previous Status : "{previous_status}"\n\n        Current Status :  "{candidate_status}"\n\nThank you once again for considering this opportunity with us. We wish you all the best in your future endeavors. \n\nIf you have any questions or need further information, please feel free to reach out to us. \n\nThanks,\n'
+    else:
+        message = ""
+        candidate_name = ""
+        candidate_position = ""
+        candidate_email = ""
+
+    return jsonify({
+        'status': 'success',
         "message": "Candidate Status Updated Successfully",
         "user_id": user_id,
         "user_type": user_type,
@@ -1394,9 +4016,203 @@ def update_candidate(candidate_id):
         "candidate_name": candidate_name,
         "candidate_position": candidate_position,
         "candidate_email": candidate_email,
-        # "message": message
         "message_body": message 
     })
+
+# @app.route('/update_candidate/<int:candidate_id>', methods=['POST'])
+# def update_candidate(candidate_id):
+#     data = request.json
+
+#     user_id = data['user_id']
+#     user = User.query.filter_by(id=user_id).first()
+#     user_type = user.user_type
+#     user_name = user.username
+#     count_notification_no = Notification.query.filter(Notification.notification_status == 'false',
+#                                                       Notification.recruiter_name == user_name).count()
+#     career_count_notification_no = Career_notification.query.filter(
+#         Career_notification.notification_status == 'false',
+#         Career_notification.recruiter_name == user_name).count()
+    
+#     if user_type == 'recruiter':
+#         recruiter = User.query.get(user_id).name
+#         management = None
+#     elif user_type == 'management':
+#         recruiter = None
+#         management = User.query.get(user_id).name
+#     else:
+#         recruiter = None
+#         management = None
+
+#     if user_type == 'recruiter':
+#         user_email = User.query.get(user_id).email
+#         management_email = None
+#     elif user_type == 'management':
+#         user_email = None
+#         management_email = User.query.get(user_id).email
+#     else:
+#         user_email = None
+#         management_email = None
+
+#     candidate = Candidate.query.filter_by(id=candidate_id).first()
+#     if not candidate:
+#         return jsonify({"error_message": "Candidate not found"}), 500
+    
+#     previous_status = candidate.status
+
+#     candidate_status = request.json.get('candidate_status')
+#     candidate_comment = request.json.get('comments')
+
+#     candidate.status = candidate_status
+#     candidate.comments = candidate_comment
+
+#     # Update data_updated_date and data_updated_time
+#     current_datetime = datetime.now(pytz.timezone('Asia/Kolkata'))
+#     candidate.data_updated_date = current_datetime.date()
+#     candidate.data_updated_time = current_datetime.time()
+
+#     db.session.commit()
+
+#     if candidate_status in [
+#             "SCREENING", "SCREEN REJECTED", "NO SHOW", "DROP", "CANDIDATE HOLD", "OFFERED - DECLINED", "DUPLICATE", "SCREENING SELECTED",
+#             "L1-SCHEDULE", "L1-FEEDBACK", "L1-SELECTED", "L1-REJECTED", "CANDIDATE RESCHEDULE", "PANEL RESCHEDULE", "L2-SCHEDULE", 
+#             "L2-FEEDBACK", "L2-SELECTED", "L2-REJECTED", "HR-ROUND", "MANAGERIAL ROUND", "NEGOTIATION", "SELECTED", "OFFER-REJECTED",
+#             "OFFER-DECLINED", "ON-BOARDED", "HOLD", "CANDIDATE NO-SHOW"
+#             ]:
+#         candidate_name = candidate.name
+#         candidate_position = candidate.position
+#         candidate_email = candidate.email
+
+#         if candidate_position:
+#             candidate_position = candidate_position.upper()
+#         else:
+#             candidate_position = ""
+
+#         if candidate.client:
+#             client = candidate.client.upper()
+#         else:
+#             client = ""
+
+#         if candidate_status in ["SCREENING", "SCREEN REJECTED"]:
+#             message = f'Dear {candidate_name}, \n\nGreetings! \n\nWe hope this email finds you well. We wanted to extend our thanks for showing your interest in the {candidate_position} position and participating in the recruitment process. \n\nWe are writing to inform you about the latest update we received from our client {client} regarding your interview. \n\n        Current Status :  "{candidate_status}"\n\nThank you once again for considering this opportunity with us. We wish you all the best in your future endeavors. \n\nIf you have any questions or need further information, please feel free to reach out to us. \n\nThanks,\n'
+#         else:
+#             message = f'Dear {candidate_name}, \n\nGreetings! \n\nWe hope this email finds you well. We wanted to extend our thanks for showing your interest in the {candidate_position} position and participating in the recruitment process. \n\nWe are writing to inform you about the latest update we received from our client {client} regarding your interview. \n\n        Previous Status : "{previous_status}"\n\n        Current Status :  "{candidate_status}"\n\nThank you once again for considering this opportunity with us. We wish you all the best in your future endeavors. \n\nIf you have any questions or need further information, please feel free to reach out to us. \n\nThanks,\n'
+#     else:
+#         message = ""
+#         candidate_name = ""
+#         candidate_position = ""
+#         candidate_email = ""
+
+#     return jsonify({
+#         "message": "Candidate Status Updated Successfully",
+#         "user_id": user_id,
+#         "user_type": user_type,
+#         "user_name": user_name,
+#         "count_notification_no": count_notification_no,
+#         "career_count_notification_no": career_count_notification_no,
+#         "recruiter": recruiter,
+#         "management": management,
+#         "recruiter_email": user_email,
+#         "management_email": management_email,
+#         "candidate_name": candidate_name,
+#         "candidate_position": candidate_position,
+#         "candidate_email": candidate_email,
+#         "message_body": message 
+#     })
+
+# @app.route('/update_candidate/<int:candidate_id>', methods=['POST'])
+# def update_candidate(candidate_id):
+#     data = request.json
+
+#     user_id = data['user_id']
+#     user = User.query.filter_by(id=user_id).first()
+#     user_type = user.user_type
+#     user_name = user.username
+#     count_notification_no = Notification.query.filter(Notification.notification_status == 'false',
+#                                                       Notification.recruiter_name == user_name).count()
+#     career_count_notification_no = Career_notification.query.filter(
+#         Career_notification.notification_status == 'false',
+#         Career_notification.recruiter_name == user_name).count()
+#     if request.method == 'POST':
+#         if user_type == 'recruiter':
+#             recruiter = User.query.get(user_id).name
+#             management = None
+#         elif user_type == 'management':
+#             recruiter = None
+#             management = User.query.get(user_id).name
+#         else:
+#             recruiter = None
+#             management = None
+
+#         if user_type == 'recruiter':
+#             user_email = User.query.get(user_id).email
+#             management_email = None
+#         elif user_type == 'management':
+#             user_email = None
+#             management_email = User.query.get(user_id).email
+#         else:
+#             user_email = None
+#             management_email = None
+
+#         candidate = Candidate.query.filter_by(id=candidate_id).first()
+#         print(candidate)
+        
+#         previous_status = candidate.status
+
+#         candidate_status = request.json.get('candidate_status')
+#         candidate_comment = request.json.get('comments')
+
+#         candidate.status = candidate_status
+#         candidate.comments = candidate_comment
+
+#         db.session.commit()
+
+#         if candidate_status in [
+#                 "SCREENING", "SCREEN REJECTED", "NO SHOW", "DROP", "CANDIDATE HOLD", "OFFERED - DECLINED", "DUPLICATE", "SCREENING SELECTED",
+#                 "L1-SCHEDULE", "L1-FEEDBACK", "L1-SELECTED", "L1-REJECTED", "CANDIDATE RESCHEDULE", "PANEL RESCHEDULE", "L2-SCHEDULE", 
+#                 "L2-FEEDBACK", "L2-SELECTED", "L2-REJECTED", "HR-ROUND", "MANAGERIAL ROUND", "NEGOTIATION", "SELECTED", "OFFER-REJECTED",
+#                 "OFFER-DECLINED", "ON-BOARDED", "HOLD", "CANDIDATE NO-SHOW"
+#                 ]:
+#             candidate_name = candidate.name
+#             candidate_position = candidate.position
+#             candidate_email = candidate.email
+
+#             if candidate_position:
+#                 candidate_position = candidate_position.upper()
+#             else:
+#                 candidate_position = ""
+
+#             if candidate.client:
+#                 client = candidate.client.upper()
+#             else:
+#                 client = ""
+
+#             if candidate_status in ["SCREENING", "SCREEN REJECTED"]:
+#                 message = f'Dear {candidate_name}, \n\nGreetings! \n\nWe hope this email finds you well. We wanted to extend our thanks for showing your interest in the {candidate_position} position and participating in the recruitment process. \n\nWe are writing to inform you about the latest update we received from our client {client} regarding your interview. \n\n        Current Status :  "{candidate_status}"\n\nThank you once again for considering this opportunity with us. We wish you all the best in your future endeavors. \n\nIf you have any questions or need further information, please feel free to reach out to us. \n\nThanks,\n'
+#             else:
+#                 message = f'Dear {candidate_name}, \n\nGreetings! \n\nWe hope this email finds you well. We wanted to extend our thanks for showing your interest in the {candidate_position} position and participating in the recruitment process. \n\nWe are writing to inform you about the latest update we received from our client {client} regarding your interview. \n\n        Previous Status : "{previous_status}"\n\n        Current Status :  "{candidate_status}"\n\nThank you once again for considering this opportunity with us. We wish you all the best in your future endeavors. \n\nIf you have any questions or need further information, please feel free to reach out to us. \n\nThanks,\n'
+#         else:
+#             message = ""
+#             candidate_name = ""
+#             candidate_position = ""
+#             candidate_email = ""
+
+#         return jsonify({
+#         "message": "Candidate Status Updated Successfully",
+#         "user_id": user_id,
+#         "user_type": user_type,
+#         "user_name": user_name,
+#         "count_notification_no": count_notification_no,
+#         "career_count_notification_no": career_count_notification_no,
+#         "recruiter": recruiter,
+#         "management": management,
+#         "recruiter_email": user_email,
+#         "management_email": management_email,
+#         "candidate_name": candidate_name,
+#         "candidate_position": candidate_position,
+#         "candidate_email": candidate_email,
+#         # "message": message
+#         "message_body": message 
+#     })
 
 @app.route('/update_candidate_careers/<int:candidate_id>/<page_no>/<search_string>', methods=['GET', 'POST'])
 @app.route('/update_candidate_careers/<int:candidate_id>/<page_no>', methods=['GET', 'POST'])
@@ -1604,53 +4420,393 @@ def logout():
 
 from datetime import datetime
 
-# Search String Changed
-# @app.route('/edit_candidate/<int:candidate_id>/<int:page_no>/<search_string>', methods=['GET', 'POST'])
 @app.route('/edit_candidate/<int:candidate_id>', methods=['POST'])
 def edit_candidate(candidate_id):
+    try:
         data = request.json
-        user_id = data['user_id']
+
+        user_id = data.get('user_id')
+        if not user_id:
+            return jsonify({"error_message": "User ID is required"}), 400
+
         user = User.query.filter_by(id=user_id).first()
+        if not user:
+            return jsonify({"error_message": "User not found"}), 404
+
         user_name = user.username
-        count_notification_no = Notification.query.filter(Notification.notification_status == 'false',
-                                                          Notification.recruiter_name == user_name).count()
+        count_notification_no = Notification.query.filter(
+            Notification.notification_status == 'false',
+            Notification.recruiter_name == user_name
+        ).count()
         career_count_notification_no = Career_notification.query.filter(
             Career_notification.notification_status == 'false',
-            Career_notification.recruiter_name == user_name).count()
+            Career_notification.recruiter_name == user_name
+        ).count()
 
-        if request.method == 'POST':
-            # Retrieve the form data for the candidate from JSON payload
-            data = request.json
+        # Retrieve the candidate object
+        candidate = Candidate.query.get(candidate_id)
+        if not candidate:
+            return jsonify({"error_message": "Candidate not found"}), 404
 
-            # Retrieve the candidate object
-            candidate = Candidate.query.get(candidate_id)
-            if candidate:
-                # Update the candidate fields with the new data
-                candidate.name = data.get('name')
-                candidate.mobile = data.get('mobile')
-                candidate.email = data.get('email')
-                candidate.client = data.get('client')
-                candidate.current_company = data.get('current_company')
-                candidate.position = data.get('position')
-                candidate.profile = data.get('profile')
-                candidate.current_job_location = data.get('current_job_location')
-                candidate.preferred_job_location = data.get('preferred_job_location')
-                candidate.qualifications = data.get('qualifications')
-                candidate.experience = data.get('experience')
-                candidate.notice_period = data.get('notice_period')
-                candidate.reason_for_job_change = data.get('reason_for_job_change')
-                candidate.linkedin_url = data.get('linkedin')
-                candidate.remarks = data.get('remarks')
-                candidate.skills = data.get('skills')
-                candidate.holding_offer = data.get('holding_offer')
-                candidate.total = data.get('total')
-                candidate.package_in_lpa = data.get('package_in_lpa')
-                candidate.period_of_notice = data.get('period_of_notice')
+        # Update the candidate fields with the new data
+        candidate.name = data.get('name')
+        candidate.mobile = data.get('mobile')
+        candidate.email = data.get('email')
+        candidate.client = data.get('client')
+        candidate.current_company = data.get('current_company')
+        candidate.position = data.get('position')
+        candidate.profile = data.get('profile')
+        candidate.current_job_location = data.get('current_job_location')
+        candidate.preferred_job_location = data.get('preferred_job_location')
+        candidate.qualifications = data.get('qualifications')
+        candidate.experience = data.get('experience')
+        candidate.relevant_experience = data.get('relevant_experience')
+        candidate.current_ctc = data.get('current_ctc')
+        candidate.expected_ctc = data.get('expected_ctc')    
+        candidate.reason_for_job_change = data.get('reason_for_job_change')
+        candidate.linkedin_url = data.get('linkedin')
+        candidate.remarks = data.get('remarks')
+        candidate.skills = data.get('skills')
+        # candidate.holding_offer = data.get('holding_offer')
+        candidate.total = data.get('total_offers')
+        candidate.package_in_lpa = data.get('highest_package')
 
-                db.session.commit()
-                return jsonify({"message": "Candidate Details Edited Successfully"})
-            else:
-                return jsonify({"error_message": "Candidate not found"}), 500
+        # Handle resume decoding
+        resume_data = data.get('resume')
+        if resume_data is not None:
+            try:
+                resume_binary = base64.b64decode(resume_data)
+                candidate.resume = resume_binary
+                candidate.resume_present = True  # Update resume_present to True if resume is provided and valid
+            except (binascii.Error, TypeError) as e:
+                return jsonify({"error_message": "Invalid resume format"}), 500
+
+        # Serving notice period logic
+        notice_period = data.get('serving_notice_period')
+        candidate.notice_period = notice_period
+        if notice_period == 'yes':
+            candidate.last_working_date = data.get('last_working_date')
+            candidate.buyout = data.get('buyout')
+        elif notice_period == 'no':
+            candidate.period_of_notice = data.get('period_of_notice')
+            candidate.buyout = data.get('buyout')
+        # elif notice_period == 'completed':
+        #     candidate.last_working_date = data.get('last_working_date')
+
+        # Holding offer logic
+        holding_offer = data.get('holding_offer')
+        if holding_offer == 'yes':
+            total_offers = data.get('total_offers')
+            candidate.total = 0 if total_offers == '' else total_offers
+            highest_package = data.get('highest_package')
+            candidate.package_in_lpa = 0 if highest_package == '' else highest_package
+        else:
+            candidate.total = None
+            candidate.package_in_lpa = None
+
+        # Update data_updated_date and data_updated_time
+        # current_datetime = datetime.now(pytz.timezone('Asia/Kolkata'))
+        # candidate.data_updated_date = current_datetime.date()
+        # candidate.data_updated_time = current_datetime.time()
+
+        db.session.commit()
+        return jsonify({'status': 'success', "message": "Candidate Details Edited Successfully"})
+
+    except Exception as e:
+        print(e)
+        return jsonify({'status': 'error', "message": "Candidate Details not Edited Successfully"})
+
+
+# @app.route('/edit_candidate/<int:candidate_id>', methods=['POST'])
+# def edit_candidate(candidate_id):
+#     try:
+#         data = request.json
+
+#         user_id = data.get('user_id')
+#         if not user_id:
+#             return jsonify({"error_message": "User ID is required"}), 400
+
+#         user = User.query.filter_by(id=user_id).first()
+#         if not user:
+#             return jsonify({"error_message": "User not found"}), 404
+
+#         user_name = user.username
+#         count_notification_no = Notification.query.filter(
+#             Notification.notification_status == 'false',
+#             Notification.recruiter_name == user_name
+#         ).count()
+#         career_count_notification_no = Career_notification.query.filter(
+#             Career_notification.notification_status == 'false',
+#             Career_notification.recruiter_name == user_name
+#         ).count()
+
+#         # Retrieve the candidate object
+#         candidate = Candidate.query.get(candidate_id)
+#         if not candidate:
+#             return jsonify({"error_message": "Candidate not found"}), 404
+
+#         # Update the candidate fields with the new data
+#         candidate.name = data.get('name')
+#         candidate.mobile = data.get('mobile')
+#         candidate.email = data.get('email')
+#         candidate.client = data.get('client')
+#         candidate.current_company = data.get('current_company')
+#         candidate.position = data.get('position')
+#         candidate.profile = data.get('profile')
+#         candidate.current_job_location = data.get('current_job_location')
+#         candidate.preferred_job_location = data.get('preferred_job_location')
+#         candidate.qualifications = data.get('qualifications')
+#         candidate.experience = data.get('experience')
+#         candidate.relevant_experience = data.get('relevant_experience')
+#         candidate.current_ctc = data.get('current_ctc')
+#         candidate.expected_ctc = data.get('expected_ctc')
+#         # candidate.serving_notice_period = data.get('serving_notice_period')
+#         candidate.notice_period = data.get('notice_period')
+#         candidate.period_of_notice = data.get('period_of_notice')
+#         candidate.reason_for_job_change = data.get('reason_for_job_change')
+#         candidate.linkedin_url = data.get('linkedin')
+#         candidate.remarks = data.get('remarks')
+#         candidate.skills = data.get('skills')
+#         candidate.holding_offer = data.get('holding_offer')
+#         candidate.total = data.get('total')
+#         candidate.package_in_lpa = data.get('package_in_lpa')
+#         candidate.buyout = data.get('buyout')
+#         candidate.total = data.get('total_offers')
+#         candidate.package_in_lpa =data.get('highest_package')
+#         candidate.last_working_date = data.get('last_working_date')
+
+#         # Handle resume decoding
+#         resume_data = data.get('resume')
+#         if resume_data is not None:
+#             try:
+#                 resume_binary = base64.b64decode(resume_data)
+#                 candidate.resume = resume_binary
+#                 candidate.resume_present = True  # Update resume_present to True if resume is provided and valid
+#             except (binascii.Error, TypeError) as e:
+#                 return jsonify({"error_message": "Invalid resume format"}), 500
+
+#         # Update data_updated_date and data_updated_time
+#         current_datetime = datetime.now(pytz.timezone('Asia/Kolkata'))
+#         candidate.data_updated_date = current_datetime.date()
+#         candidate.data_updated_time = current_datetime.time()
+
+#         db.session.commit()
+#         return jsonify({'status': 'success',"message": "Candidate Details Edited Successfully"})
+
+#     except Exception as e:
+#         return jsonify({'status': 'error',"message": "Candidate Details not Edited Successfully"})
+
+
+# @app.route('/edit_candidate/<int:candidate_id>', methods=['POST'])
+# def edit_candidate(candidate_id):
+#     try:
+#         data = request.json
+
+#         user_id = data.get('user_id')
+#         if not user_id:
+#             return jsonify({"error_message": "User ID is required"}), 400
+
+#         user = User.query.filter_by(id=user_id).first()
+#         if not user:
+#             return jsonify({"error_message": "User not found"}), 404
+
+#         user_name = user.username
+#         count_notification_no = Notification.query.filter(
+#             Notification.notification_status == 'false',
+#             Notification.recruiter_name == user_name
+#         ).count()
+#         career_count_notification_no = Career_notification.query.filter(
+#             Career_notification.notification_status == 'false',
+#             Career_notification.recruiter_name == user_name
+#         ).count()
+
+#         # Retrieve the candidate object
+#         candidate = Candidate.query.get(candidate_id)
+#         if not candidate:
+#             return jsonify({"error_message": "Candidate not found"}), 404
+
+#         # Update the candidate fields with the new data
+#         candidate.name = data.get('name')
+#         candidate.mobile = data.get('mobile')
+#         candidate.email = data.get('email')
+#         candidate.client = data.get('client')
+#         candidate.current_company = data.get('current_company')
+#         candidate.position = data.get('position')
+#         candidate.profile = data.get('profile')
+#         candidate.current_job_location = data.get('current_job_location')
+#         candidate.preferred_job_location = data.get('preferred_job_location')
+#         candidate.qualifications = data.get('qualifications')
+#         candidate.experience = data.get('experience')
+#         candidate.relevant_experience = data.get('relevant_experience')
+#         candidate.current_ctc = data.get('current_ctc')
+#         candidate.expected_ctc = data.get('expected_ctc')
+#         candidate.notice_period = data.get('notice_period')
+#         candidate.reason_for_job_change = data.get('reason_for_job_change')
+#         candidate.linkedin_url = data.get('linkedin')
+#         candidate.remarks = data.get('remarks')
+#         candidate.skills = data.get('skills')
+#         candidate.holding_offer = data.get('holding_offer')
+#         candidate.total = data.get('total')
+#         candidate.package_in_lpa = data.get('package_in_lpa')
+#         candidate.buyout = data.get('buyout')
+#         candidate.last_working_date=data.get('last_working_date')
+        
+#         # # Handle resume decoding
+#         # resume_data = data.get('resume')
+#         # if resume_data:
+#         #     try:
+#         #         resume_binary = base64.b64decode(resume_data)
+#         #         candidate.resume = resume_binary
+#         #     except (base64.binascii.Error, TypeError) as e:
+#         #         return jsonify({"error_message": "Invalid resume format"}), 400
+                
+#         # if resume_binary is not None:
+#         #     resume_present = True
+#         # else:
+#         #     resume_present = False
+
+#         # resume_data = data.get('resume')
+#         # resume_binary = None  # Initialize resume_binary
+#         # resume_present = False  # Initialize resume_present
+#         # if resume_data:
+#         #     try:
+#         #         resume_binary = base64.b64decode(resume_data)
+#         #         resume_present = True if resume_binary is not None
+#         #         candidate.resume = resume_binary
+#         #     except (binascii.Error, TypeError) as e:
+#         #         return jsonify({"error_message": "Invalid resume format"}), 400
+
+                
+                
+#         # Update resume_present status
+#         candidate.resume_present = resume_present
+            
+#         # Update data_updated_date and data_updated_time
+#         current_datetime = datetime.now(pytz.timezone('Asia/Kolkata'))
+#         candidate.data_updated_date = current_datetime.date()
+#         candidate.data_updated_time = current_datetime.time()
+
+#         db.session.commit()
+#         return jsonify({"message": "Candidate Details Edited Successfully"})
+
+#     except Exception as e:
+#         return jsonify({"error_message": str(e)}), 500
+
+# @app.route('/edit_candidate/<int:candidate_id>', methods=['POST'])
+# def edit_candidate(candidate_id):
+#     data = request.json
+#     user_id = data['user_id']
+#     user = User.query.filter_by(id=user_id).first()
+#     user_name = user.username
+#     count_notification_no = Notification.query.filter(
+#         Notification.notification_status == 'false',
+#         Notification.recruiter_name == user_name
+#     ).count()
+#     career_count_notification_no = Career_notification.query.filter(
+#         Career_notification.notification_status == 'false',
+#         Career_notification.recruiter_name == user_name
+#     ).count()
+
+#     if request.method == 'POST':
+#         # Retrieve the form data for the candidate from JSON payload
+#         data = request.json
+
+#         # Retrieve the candidate object
+#         candidate = Candidate.query.get(candidate_id)
+#         if candidate:
+#             # Update the candidate fields with the new data
+#             candidate.name = data.get('name')
+#             candidate.mobile = data.get('mobile')
+#             candidate.email = data.get('email')
+#             candidate.client = data.get('client')
+#             candidate.current_company = data.get('current_company')
+#             candidate.position = data.get('position')
+#             candidate.profile = data.get('profile')
+#             candidate.current_job_location = data.get('current_job_location')
+#             candidate.preferred_job_location = data.get('preferred_job_location')
+#             candidate.qualifications = data.get('qualifications')
+#             candidate.experience = data.get('experience')
+#             candidate.relevant_experience=data.get('relevant_experience')
+#             candidate.current_ctc=data.get('current_ctc')
+#             candidate.expected_ctc=data.get('expected_ctc')
+#             candidate.notice_period = data.get('notice_period')
+#             candidate.reason_for_job_change = data.get('reason_for_job_change')
+#             candidate.linkedin_url = data.get('linkedin')
+#             candidate.remarks = data.get('remarks')
+#             candidate.skills = data.get('skills')
+#             candidate.holding_offer = data.get('holding_offer')
+#             candidate.total = data.get('total')
+#             candidate.package_in_lpa = data.get('package_in_lpa')
+#             candidate.buyout=data.get('buyout')
+#             # candidate.resume=data.get('resume')
+            
+#             # Handle resume decoding
+#             resume_data =data.get('resume')
+#             if resume_data:
+#                 try:
+#                     resume_binary = base64.b64decode(resume_data)
+#                     candidate.resume = resume_binary
+#                 except base64.binascii.Error as e:
+#                     return jsonify({"error_message": "Invalid resume format"}), 400
+            
+
+#             # Update data_updated_date and data_updated_time
+#             current_datetime = datetime.now(pytz.timezone('Asia/Kolkata'))
+#             candidate.data_updated_date = current_datetime.date()
+#             candidate.data_updated_time = current_datetime.time()
+
+#             db.session.commit()
+#             return jsonify({"message": "Candidate Details Edited Successfully"})
+#         else:
+#             return jsonify({"error_message": "Candidate not found"}), 500
+
+# # Search String Changed
+# # @app.route('/edit_candidate/<int:candidate_id>/<int:page_no>/<search_string>', methods=['GET', 'POST'])
+# @app.route('/edit_candidate/<int:candidate_id>', methods=['POST'])
+# def edit_candidate(candidate_id):
+#         data = request.json
+#         user_id = data['user_id']
+#         user = User.query.filter_by(id=user_id).first()
+#         user_name = user.username
+#         count_notification_no = Notification.query.filter(Notification.notification_status == 'false',
+#                                                           Notification.recruiter_name == user_name).count()
+#         career_count_notification_no = Career_notification.query.filter(
+#             Career_notification.notification_status == 'false',
+#             Career_notification.recruiter_name == user_name).count()
+
+#         if request.method == 'POST':
+#             # Retrieve the form data for the candidate from JSON payload
+#             data = request.json
+
+#             # Retrieve the candidate object
+#             candidate = Candidate.query.get(candidate_id)
+#             if candidate:
+#                 # Update the candidate fields with the new data
+#                 candidate.name = data.get('name')
+#                 candidate.mobile = data.get('mobile')
+#                 candidate.email = data.get('email')
+#                 candidate.client = data.get('client')
+#                 candidate.current_company = data.get('current_company')
+#                 candidate.position = data.get('position')
+#                 candidate.profile = data.get('profile')
+#                 candidate.current_job_location = data.get('current_job_location')
+#                 candidate.preferred_job_location = data.get('preferred_job_location')
+#                 candidate.qualifications = data.get('qualifications')
+#                 candidate.experience = data.get('experience')
+#                 candidate.notice_period = data.get('notice_period')
+#                 candidate.reason_for_job_change = data.get('reason_for_job_change')
+#                 candidate.linkedin_url = data.get('linkedin')
+#                 candidate.remarks = data.get('remarks')
+#                 candidate.skills = data.get('skills')
+#                 candidate.holding_offer = data.get('holding_offer')
+#                 candidate.total = data.get('total')
+#                 candidate.package_in_lpa = data.get('package_in_lpa')
+#                 candidate.period_of_notice = data.get('period_of_notice')
+
+#                 db.session.commit()
+#                 return jsonify({"message": "Candidate Details Edited Successfully"})
+#             else:
+#                 return jsonify({"error_message": "Candidate not found"}), 500
 
 
 @app.route('/edit_candidate_careers/<int:candidate_id>/<int:page_no>/<search_string>', methods=['GET', 'POST'])
@@ -1825,121 +4981,976 @@ def download_resume(candidate_id):
                      as_attachment=True)
 
 
+
+# def send_notification(recruiter_email):
+#     msg = Message('New Job Posted', sender='ganesh.s@makonissoft.com', recipients=[recruiter_email])
+#     msg.body = 'A new job has been posted. Check your dashboard for more details.'
+#     mail.send(msg)
+
+
+def post_job_send_notification(recruiter_email, new_recruiter_name, job_data):
+    html_body = f"""
+    <html>
+    <head>
+        <style>
+            body {{
+                font-family: Arial, sans-serif;
+                color: #333;
+                line-height: 1.6;
+                background-color: #f4f4f4;
+                margin: 0;
+                padding: 0;
+            }}
+            .container {{
+                padding: 20px;
+                margin: 20px auto;
+                max-width: 600px;
+                background-color: #ffffff;
+                border: 1px solid #ddd;
+                border-radius: 8px;
+                box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            }}
+            .header {{
+                background-color: #4CAF50;
+                color: white;
+                padding: 10px;
+                text-align: center;
+                font-size: 20px;
+                border-radius: 8px 8px 0 0;
+            }}
+            table {{
+                border-collapse: collapse;
+                width: 100%;
+                margin-top: 10px;
+            }}
+            th, td {{
+                border: 1px solid #ddd;
+                padding: 8px;
+                text-align: left;
+            }}
+            th {{
+                background-color: #4CAF50;
+                color: white;
+            }}
+            tr:nth-child(even) {{
+                background-color: #f9f9f9;
+            }}
+            p {{
+                margin: 10px 0;
+            }}
+            .footer {{
+                margin-top: 20px;
+                font-size: 12px;
+                color: #777;
+                text-align: center;
+                border-top: 1px solid #ddd;
+                padding-top: 10px;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                New Job Posted
+            </div>
+            <p>Dear {new_recruiter_name},</p>
+            <p>A new requirement has been assigned to you.</p>
+            <p> Please find the details below:</p>
+            <table>
+                <tr>
+                    <th style="width: 20%;">Job ID</th>
+                    <th style="width: 30%;">Client</th>
+                    <th style="width: 30%;">Role/Profile</th>
+                    <th style="width: 30%;">Location</th>
+                </tr>
+                {job_data}
+            </table>
+            <p>Please check in Job Listing page for more details.</p>
+            <p>Regards,</p>
+            <p><b>Makonis Talent Track Pro Team</b></p>
+        </div>
+    </body>
+    </html>
+    """
+
+    msg = Message(
+        # 'New Job Notification',
+        f'New Requirement Assigned',
+        sender='kanuparthisaiganesh582@gmail.com',
+        recipients=[recruiter_email]
+    )
+    msg.html = html_body
+    mail.send(msg)
+
+
+# def post_job_send_notification(recruiter_email, new_recruiter_name, job_data):
+#     html_body = f"""
+#     <html>
+#     <head>
+#         <style>
+#             body {{
+#                 font-family: Arial, sans-serif;
+#                 color: #333;
+#                 line-height: 1.6;
+#                 background-color: #f4f4f4;
+#                 margin: 0;
+#                 padding: 0;
+#             }}
+#             .container {{
+#                 padding: 20px;
+#                 margin: 20px auto;
+#                 max-width: 600px;
+#                 background-color: #ffffff;
+#                 border: 1px solid #ddd;
+#                 border-radius: 8px;
+#                 box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+#             }}
+#             .header {{
+#                 background-color: #4CAF50;
+#                 color: white;
+#                 padding: 10px;
+#                 text-align: center;
+#                 font-size: 20px;
+#                 border-radius: 8px 8px 0 0;
+#             }}
+#             table {{
+#                 border-collapse: collapse;
+#                 width: 100%;
+#                 margin-top: 10px;
+#             }}
+#             th, td {{
+#                 border: 1px solid #ddd;
+#                 padding: 8px;
+#                 text-align: left;
+#             }}
+#             th {{
+#                 background-color: #4CAF50;
+#                 color: white;
+#             }}
+#             tr:nth-child(even) {{
+#                 background-color: #f9f9f9;
+#             }}
+#             p {{
+#                 margin: 10px 0;
+#             }}
+#             .footer {{
+#                 margin-top: 20px;
+#                 font-size: 12px;
+#                 color: #777;
+#                 text-align: center;
+#                 border-top: 1px solid #ddd;
+#                 padding-top: 10px;
+#             }}
+#         </style>
+#     </head>
+#     <body>
+#         <div class="container">
+#             <div class="header">
+#                 New Job Posted
+#             </div>
+#             <p>Dear {new_recruiter_name},</p>
+#             <p>The following job have been assigned to you:</p>
+#             <table>
+#                 <tr>
+#                     <th style="width: 20%;">Job ID</th>
+#                     <th style="width: 30%;">Client</th>
+#                     <th style="width: 30%;">Role/Profile</th>
+#                     <th style="width: 30%;">Location</th>
+#                 </tr>
+#                 {job_data}
+#             </table>
+#             <p>Check your dashboard for more details.</p>
+#             <p>Regards,</p>
+#             <p>Your Company</p>
+#         </div>
+#     </body>
+#     </html>
+#     """
+
+#     msg = Message(
+#         'New Job Notification',
+#         sender='ganesh.s@makonissoft.com',
+#         recipients=[recruiter_email]
+#     )
+#     msg.html = html_body
+#     mail.send(msg)
+
+
 @app.route('/post_job', methods=['POST'])
 def post_job():
     try:
-        # Accessing the JSON data from the request
         data = request.json
         user_id = data['user_id']
         user = User.query.filter_by(id=user_id).first()
-        print("user :",user)
-        user_name = user.username
-        print("user_name:",user_name)
-        # Check if the "user_name" field exists
-        if user_name:
-            user_type = user.user_type
 
-            if user_type == 'management':
-                client = data.get('client')
-                experience_min = data.get('experience_min')
-                experience_max = data.get('experience_max')
-                budget_min = data.get('budget_min')
-                budget_max = data.get('budget_max')
-                currency_type_min = data.get('currency_type_min')
-                currency_type_max = data.get('currency_type_max')
-                budget_min = currency_type_min + ' ' + budget_min
-                budget_max = currency_type_max + ' ' + budget_max
-                location = data.get('location')
-                shift_timings = data.get('shift_timings')
-                notice_period = data.get('notice_period')
-                role = data.get('role')
-                detailed_jd = data.get('detailed_jd')
-                mode = data.get('mode')
-                job_status = data.get('job_status')
-                job_type = data.get('job_type')
-                skills = data.get('skills')
-                jd_pdf = data.get('jd_pdf')
-                # Job_Type_details=data.get('Job_Type_details')
+        if not user:
+            return jsonify({'status': 'error', 'message': 'User not found'}), 400
 
-                if job_type == 'Contract':
-                    Job_Type_details = data.get('Job_Type_details')
-                    job_type = job_type + '(' + Job_Type_details + ' Months )'
+        if user.user_type != 'management':
+            return jsonify({'status': 'error', 'message': 'Job post not added successfully'}), 400
 
-                recruiter_names = data.get('recruiter', [])
-                joined_recruiters = ', '.join(recruiter_names)
+        job_details = {
+            'client': data.get('client'),
+            'experience_min': data.get('experience_min'),
+            'experience_max': data.get('experience_max'),
+            'budget_min': f"{data.get('currency_type_min')} {data.get('budget_min')}",
+            'budget_max': f"{data.get('currency_type_max')} {data.get('budget_max')}",
+            'location': data.get('location'),
+            'shift_timings': data.get('shift_timings'),
+            'notice_period': data.get('notice_period'),
+            'role': data.get('role'),
+            'detailed_jd': data.get('detailed_jd'),
+            'mode': data.get('mode'),
+            'job_status': data.get('job_status'),
+            'skills': data.get('skills'),
+            'job_type': data.get('Job_Type'),
+            'contract_in_months': data.get('Job_Type_details') if data.get('Job_Type') == 'Contract' else None
+        }
 
-                new_job_post = JobPost(
-                    client=client,
-                    experience_min=experience_min,
-                    experience_max=experience_max,
-                    budget_min=budget_min,
-                    budget_max=budget_max,
-                    location=location,
-                    shift_timings=shift_timings,
-                    notice_period=notice_period,
-                    role=role,
-                    detailed_jd=detailed_jd,
-                    mode=mode,
-                    recruiter=joined_recruiters,
-                    management=user.username,
-                    job_status=job_status,
-                    job_type=job_type,
-                    skills=skills,
-                    jd_pdf=jd_pdf
-                )
+        jd_pdf = data.get('jd_pdf')
+        jd_binary = None
+        jd_pdf_present = False
 
-                new_job_post.notification = 'no'
-                new_job_post.date_created = date.today()
-                new_job_post.time_created = datetime.now().time()
+        if jd_pdf:
+            try:
+                jd_binary = base64.b64decode(jd_pdf)
+                jd_pdf_present = bool(jd_binary)
+            except Exception as e:
+                return jsonify({'status': 'error', 'message': 'Error decoding base64 PDF file', 'details': str(e)}), 400
 
-                # Add the new_job_post to the session and commit to generate the job_post_id
-                db.session.add(new_job_post)
-                db.session.commit()
+        new_job_post = JobPost(
+            client=job_details['client'],
+            experience_min=job_details['experience_min'],
+            experience_max=job_details['experience_max'],
+            budget_min=job_details['budget_min'],
+            budget_max=job_details['budget_max'],
+            location=job_details['location'],
+            shift_timings=job_details['shift_timings'],
+            notice_period=job_details['notice_period'],
+            role=job_details['role'],
+            detailed_jd=job_details['detailed_jd'],
+            recruiter=', '.join(data.get('recruiter', [])),
+            management=user.username,
+            mode=job_details['mode'],
+            job_status=job_details['job_status'],
+            job_type=job_details['job_type'],
+            skills=job_details['skills'],
+            contract_in_months=job_details['contract_in_months'],
+            jd_pdf=jd_binary,
+            jd_pdf_present=jd_pdf_present
+        )
 
-                # Generate job_post_id after committing the new_job_post
-                job_post_id = new_job_post.id
+        current_datetime = datetime.now(pytz.timezone('Asia/Kolkata'))
+        new_job_post.date_created = current_datetime.date()
+        new_job_post.time_created = current_datetime.time()
 
-                # Define an empty list to hold Notification instances
-                notifications = []
+        db.session.add(new_job_post)
+        db.session.commit()
 
-                for recruiter_name in joined_recruiters.split(','):
-                    notification_status = False
-                    notification = Notification(
-                        job_post_id=job_post_id,  # Add job_post_id to Notification
-                        recruiter_name=recruiter_name.strip(),
-                        notification_status=notification_status
-                    )
-                    # Append each Notification instance to the notifications list
-                    notifications.append(notification)
+        job_post_id = new_job_post.id
 
-                # Add the notifications to the session and commit
-                db.session.add_all(notifications)
-                db.session.commit()
-                notifications = Notification.query.filter_by(job_post_id=job_post_id).all()
-                for notification in notifications:
-                    notification.num_notification += 1
-                db.session.commit()
+        for recruiter_name in data.get('recruiter', []):
+            notification = Notification(
+                job_post_id=job_post_id,
+                recruiter_name=recruiter_name.strip(),
+                notification_status=False
+            )
+            db.session.add(notification)
 
-                # Retrieve the email addresses of the recruiters
-                recruiter_emails = [recruiter.email for recruiter in User.query.filter(User.username.in_(recruiter_names),
-                                                                                         User.user_type == 'recruiter',
-                                                                                         User.is_active == True,
-                                                                                         User.is_verified == True)]
-                for email in recruiter_emails:
-                    send_notification(email)
+        db.session.commit()
 
-                # Return the job_id along with the success message
-                return jsonify({"message": "Job posted successfully", "job_id": job_post_id}), 200
-            else:
-                return jsonify({"error": "Invalid user type"}), 400
-        else:
-            return jsonify({"error": "Missing 'user_name' field in the request"}), 400
+        job_data = f"<tr><td>{job_post_id}</td><td>{new_job_post.client}</td><td>{new_job_post.role}</td><td>{new_job_post.location}</td></tr>"
+
+        for recruiter_name in data.get('recruiter', []):
+            recruiter = User.query.filter_by(username=recruiter_name.strip()).first()
+            if recruiter:
+                post_job_send_notification(recruiter.email, recruiter.username, job_data)
+
+        return jsonify({'status': 'success', 'message': 'Job posted successfully', 'job_post_id': job_post_id}), 200
 
     except KeyError as e:
-        return jsonify({"error": f"KeyError: {e}"}), 400
+        return jsonify({"status": "error", "message": f"KeyError: {e}"}), 400
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+
+# @app.route('/post_job', methods=['POST'])
+# def post_job():
+#     try:
+#         data = request.json
+#         user_id = data['user_id']
+#         user = User.query.filter_by(id=user_id).first()
+
+#         if not user:
+#             return jsonify({'status': 'error', 'message': 'User not found'}), 400
+
+#         if user.user_type != 'management':
+#             return jsonify({'status': 'error', 'message': 'Job post not added successfully'}), 400
+
+#         job_details = {
+#             'client': data.get('client'),
+#             'experience_min': data.get('experience_min'),
+#             'experience_max': data.get('experience_max'),
+#             'budget_min': f"{data.get('currency_type_min')} {data.get('budget_min')}",
+#             'budget_max': f"{data.get('currency_type_max')} {data.get('budget_max')}",
+#             'location': data.get('location'),
+#             'shift_timings': data.get('shift_timings'),
+#             'notice_period': data.get('notice_period'),
+#             'role': data.get('role'),
+#             'detailed_jd': data.get('detailed_jd'),
+#             'mode': data.get('mode'),
+#             'job_status': data.get('job_status'),
+#             'skills': data.get('skills'),
+#             'job_type': data.get('Job_Type'),
+#             'contract_in_months': data.get('Job_Type_details') if data.get('Job_Type') == 'Contract' else None
+#         }
+
+#         jd_pdf = data.get('jd_pdf')
+#         jd_binary = None
+#         jd_pdf_present = False
+
+#         if jd_pdf:
+#             try:
+#                 jd_binary = base64.b64decode(jd_pdf)
+#                 jd_pdf_present = bool(jd_binary)
+#             except Exception as e:
+#                 return jsonify({'status': 'error', 'message': 'Error decoding base64 PDF file', 'details': str(e)}), 400
+
+#         new_job_post = JobPost(
+#             client=job_details['client'],
+#             experience_min=job_details['experience_min'],
+#             experience_max=job_details['experience_max'],
+#             budget_min=job_details['budget_min'],
+#             budget_max=job_details['budget_max'],
+#             location=job_details['location'],
+#             shift_timings=job_details['shift_timings'],
+#             notice_period=job_details['notice_period'],
+#             role=job_details['role'],
+#             detailed_jd=job_details['detailed_jd'],
+#             recruiter=', '.join(data.get('recruiter', [])),
+#             management=user.username,
+#             mode=job_details['mode'],
+#             job_status=job_details['job_status'],
+#             job_type=job_details['job_type'],
+#             skills=job_details['skills'],
+#             contract_in_months=job_details['contract_in_months'],
+#             jd_pdf=jd_binary,
+#             jd_pdf_present=jd_pdf_present
+#         )
+
+#         current_datetime = datetime.now(pytz.timezone('Asia/Kolkata'))
+#         new_job_post.date_created = current_datetime.date()
+#         new_job_post.time_created = current_datetime.time()
+
+#         db.session.add(new_job_post)
+#         db.session.commit()
+
+#         job_post_id = new_job_post.id
+
+#         for recruiter_name in data.get('recruiter', []):
+#             notification = Notification(
+#                 job_post_id=job_post_id,
+#                 recruiter_name=recruiter_name.strip(),
+#                 notification_status=False
+#             )
+#             db.session.add(notification)
+
+#         db.session.commit()
+
+#         job_data = f"<tr><td>{new_job_post.id}</td><td>{new_job_post.client}</td><td>{new_job_post.role}</td><td>{new_job_post.location}</td></tr>"
+
+#         for recruiter_name in data.get('recruiter', []):
+#             recruiter = User.query.filter_by(username=recruiter_name.strip()).first()
+#             if recruiter:
+#                 post_job_send_notification(recruiter.email, recruiter.username, job_data)
+
+#         return jsonify({'status': 'success', 'message': 'Job posted successfully', 'job_id': job_post_id}), 200
+
+#     except KeyError as e:
+#         return jsonify({"status": "error", "message": f"KeyError: {e}"}), 500
+
+#     except Exception as e:
+#         return jsonify({"status": "error", "message": str(e)}), 500
+
+# @app.route('/post_job', methods=['POST'])
+# def post_job():
+#     try:
+#         # Accessing the JSON data from the request
+#         data = request.json
+#         user_id = data['user_id']
+#         user = User.query.filter_by(id=user_id).first()
+
+#         # Check if the user exists
+#         if not user:
+#             return jsonify({'status': 'error', 'message': 'User not found'}), 400
+
+#         user_type = user.user_type
+#         if user_type != 'management':
+#             return jsonify({'status': 'error', 'message': 'Job post not added successfully'}), 400
+
+#         # Extracting job details from the request
+#         job_details = {
+#             'client': data.get('client'),
+#             'experience_min': data.get('experience_min'),
+#             'experience_max': data.get('experience_max'),
+#             'budget_min': f"{data.get('currency_type_min')} {data.get('budget_min')}",
+#             'budget_max': f"{data.get('currency_type_max')} {data.get('budget_max')}",
+#             'location': data.get('location'),
+#             'shift_timings': data.get('shift_timings'),
+#             'notice_period': data.get('notice_period'),
+#             'role': data.get('role'),
+#             'detailed_jd': data.get('detailed_jd'),
+#             'mode': data.get('mode'),
+#             'job_status': data.get('job_status'),
+#             'skills': data.get('skills'),
+#             'job_type': data.get('Job_Type'),
+#             'contract_in_months': data.get('Job_Type_details') if data.get('Job_Type') == 'Contract' else None
+#         }
+
+#         # Decode the base64 encoded PDF file
+#         jd_pdf = data.get('jd_pdf')
+#         jd_binary = None
+#         jd_pdf_present = False  # Default value
+#         if jd_pdf:
+#             try:
+#                 jd_binary = base64.b64decode(jd_pdf)
+#                 jd_pdf_present = bool(jd_binary)  # If jd_binary is not None, set jd_pdf_present to True
+#             except Exception as e:
+#                 return jsonify({'status': 'error', 'message': 'Error decoding base64 PDF file', 'details': str(e)}), 400
+
+#         # Create a new job post instance
+#         new_job_post = JobPost(
+#             client=job_details['client'],
+#             experience_min=job_details['experience_min'],
+#             experience_max=job_details['experience_max'],
+#             budget_min=job_details['budget_min'],
+#             budget_max=job_details['budget_max'],
+#             location=job_details['location'],
+#             shift_timings=job_details['shift_timings'],
+#             notice_period=job_details['notice_period'],
+#             role=job_details['role'],
+#             detailed_jd=job_details['detailed_jd'],
+#             recruiter=', '.join(data.get('recruiter', [])),
+#             management=user.username,
+#             mode=job_details['mode'],
+#             job_status=job_details['job_status'],
+#             job_type=job_details['job_type'],
+#             skills=job_details['skills'],
+#             contract_in_months=job_details['contract_in_months'],
+#             jd_pdf=jd_binary,  # Store the binary data in the database
+#             jd_pdf_present=jd_pdf_present  # Store whether PDF is present
+#         )
+
+#         # Set created date and time
+#         current_datetime = datetime.now(pytz.timezone('Asia/Kolkata'))
+#         new_job_post.date_created = current_datetime.date()
+#         new_job_post.time_created = current_datetime.time()
+
+#         # Add the new job post to the session and commit
+#         db.session.add(new_job_post)
+#         db.session.commit()
+
+#         # Generate job_post_id after committing the new_job_post
+#         job_post_id = new_job_post.id
+
+#         # Add notifications for each recruiter
+#         for recruiter_name in data.get('recruiter', []):
+#             notification = Notification(
+#                 job_post_id=job_post_id,
+#                 recruiter_name=recruiter_name.strip(),
+#                 notification_status=False
+#             )
+#             db.session.add(notification)
+
+#         db.session.commit()
+
+#         # Create job data for the email notification
+#         job_data = f"<tr><td>{new_job_post.id}</td><td>{new_job_post.client}</td><td>{new_job_post.role}</td><td>{new_job_post.location}</td></tr>"
+
+#         # Send notifications to recruiters
+#         for recruiter_name in data.get('recruiter', []):
+#             recruiter = User.query.filter_by(username=recruiter_name.strip()).first()
+#             if recruiter:
+#                 post_job_send_notification(recruiter.email, recruiter.username, job_data)
+
+#         # Return the job_id along with the success message
+#         return jsonify({'status': 'success', 'message': 'Job posted successfully', 'job_id': job_post_id}), 200
+
+#     except KeyError as e:
+#         return jsonify({"status": "error", "message": f"KeyError: {e}"}), 400
+
+#     except Exception as e:
+#         return jsonify({"status": "error", "message": str(e)}), 500
+
+############################################################################################
+# @app.route('/post_job', methods=['POST'])
+# def post_job():
+#     try:
+#         # Accessing the JSON data from the request
+#         data = request.json
+#         user_id = data['user_id']
+#         user = User.query.filter_by(id=user_id).first()
+
+#         # Check if the user exists
+#         if not user:
+#             return jsonify({'status': 'error', 'message': 'User not found'}), 400
+
+#         user_type = user.user_type
+#         if user_type != 'management':
+#             return jsonify({'status': 'error', 'message': 'Job post not added successfully'}), 400
+
+#         # Extracting job details from the request
+#         job_details = {
+#             'client': data.get('client'),
+#             'experience_min': data.get('experience_min'),
+#             'experience_max': data.get('experience_max'),
+#             'budget_min': f"{data.get('currency_type_min')} {data.get('budget_min')}",
+#             'budget_max': f"{data.get('currency_type_max')} {data.get('budget_max')}",
+#             'location': data.get('location'),
+#             'shift_timings': data.get('shift_timings'),
+#             'notice_period': data.get('notice_period'),
+#             'role': data.get('role'),
+#             'detailed_jd': data.get('detailed_jd'),
+#             'mode': data.get('mode'),
+#             'job_status': data.get('job_status'),
+#             'skills': data.get('skills'),
+#             'job_type': data.get('Job_Type'),
+#             'contract_in_months': data.get('Job_Type_details') if data.get('Job_Type') == 'Contract' else None
+#         }
+
+#         # Decode the base64 encoded PDF file
+#         jd_pdf = data.get('jd_pdf')
+#         jd_binary = None
+#         jd_pdf_present = False  # Default value
+#         if jd_pdf:
+#             try:
+#                 jd_binary = base64.b64decode(jd_pdf)
+#                 jd_pdf_present = bool(jd_binary)  # If jd_binary is not None, set jd_pdf_present to True
+#             except Exception as e:
+#                 return jsonify({'status': 'error', 'message': 'Error decoding base64 PDF file', 'details': str(e)}), 400
+
+#         # Create a new job post instance
+#         new_job_post = JobPost(
+#             client=job_details['client'],
+#             experience_min=job_details['experience_min'],
+#             experience_max=job_details['experience_max'],
+#             budget_min=job_details['budget_min'],
+#             budget_max=job_details['budget_max'],
+#             location=job_details['location'],
+#             shift_timings=job_details['shift_timings'],
+#             notice_period=job_details['notice_period'],
+#             role=job_details['role'],
+#             detailed_jd=job_details['detailed_jd'],
+#             recruiter=', '.join(data.get('recruiter', [])),
+#             management=user.username,
+#             mode=job_details['mode'],
+#             job_status=job_details['job_status'],
+#             job_type=job_details['job_type'],
+#             skills=job_details['skills'],
+#             contract_in_months=job_details['contract_in_months'],
+#             jd_pdf=jd_binary,  # Store the binary data in the database
+#             jd_pdf_present=jd_pdf_present  # Store whether PDF is present
+#         )
+
+#         # Set created date and time
+#         current_datetime = datetime.now(pytz.timezone('Asia/Kolkata'))
+#         new_job_post.date_created = current_datetime.date()
+#         new_job_post.time_created = current_datetime.time()
+
+#         # Add the new job post to the session and commit
+#         db.session.add(new_job_post)
+#         db.session.commit()
+
+#         # Generate job_post_id after committing the new_job_post
+#         job_post_id = new_job_post.id
+
+#         # Add notifications for each recruiter
+#         for recruiter_name in data.get('recruiter', []):
+#             notification = Notification(
+#                 job_post_id=job_post_id,
+#                 recruiter_name=recruiter_name.strip(),
+#                 notification_status=False
+#             )
+#             db.session.add(notification)
+
+#         db.session.commit()
+
+#         # Send notifications to recruiters
+#         for recruiter_name in data.get('recruiter', []):
+#             recruiter = User.query.filter_by(username=recruiter_name.strip()).first()
+#             if recruiter:
+#                 send_notification(recruiter.email)
+
+#         # Return the job_id along with the success message
+#         return jsonify({'status': 'success', 'message': 'Job posted successfully', 'job_id': job_post_id}), 200
+
+#     except KeyError as e:
+#         return jsonify({"status": "error", "message": f"KeyError: {e}"})
+
+#     except Exception as e:
+#         return jsonify({"status": "error", "message": str(e)}), 500
+
+################################################################################################
+
+# @app.route('/post_job', methods=['POST'])
+# def post_job():
+#     try:
+#         # Accessing the JSON data from the request
+#         data = request.json
+#         user_id = data['user_id']
+#         user = User.query.filter_by(id=user_id).first()
+        
+#         # Check if the user exists
+#         if not user:
+#             return jsonify({'status': 'error', 'message': 'User not found'}), 400
+        
+#         user_type = user.user_type
+#         if user_type != 'management':
+#             return jsonify({'status': 'error', 'message': 'Job post not added successfully'})
+        
+#         # Extracting job details from the request
+#         job_details = {
+#             'client': data.get('client'),
+#             'experience_min': data.get('experience_min'),
+#             'experience_max': data.get('experience_max'),
+#             'budget_min': f"{data.get('currency_type_min')} {data.get('budget_min')}",
+#             'budget_max': f"{data.get('currency_type_max')} {data.get('budget_max')}",
+#             'location': data.get('location'),
+#             'shift_timings': data.get('shift_timings'),
+#             'notice_period': data.get('notice_period'),
+#             'role': data.get('role'),
+#             'detailed_jd': data.get('detailed_jd'),
+#             'mode': data.get('mode'),
+#             'job_status': data.get('job_status'),
+#             'skills': data.get('skills'),
+#             'job_type': data.get('Job_Type'),
+#             'contract_in_months': data.get('Job_Type_details') if data.get('Job_Type') == 'Contract' else None
+#         }
+        
+#         # Decode the base64 encoded PDF file
+#         jd_pdf = data.get('jd_pdf')
+#         jd_binary = None
+#         jd_pdf_present = False  # Default value
+#         if jd_pdf:
+#             try:
+#                 jd_binary = base64.b64decode(jd_pdf)
+#                 jd_pdf_present = bool(jd_binary)  # If jd_binary is not None, set jd_pdf_present to True
+#             except Exception as e:
+#                 return jsonify({'status': 'error', 'message': 'Error decoding base64 PDF file', 'details': str(e)})
+        
+#         # Create a new job post instance
+#         new_job_post = JobPost(
+#             client=job_details['client'],
+#             experience_min=job_details['experience_min'],
+#             experience_max=job_details['experience_max'],
+#             budget_min=job_details['budget_min'],
+#             budget_max=job_details['budget_max'],
+#             location=job_details['location'],
+#             shift_timings=job_details['shift_timings'],
+#             notice_period=job_details['notice_period'],
+#             role=job_details['role'],
+#             detailed_jd=job_details['detailed_jd'],
+#             recruiter=', '.join(data.get('recruiter', [])),
+#             management=user.username,
+#             mode=job_details['mode'],
+#             job_status=job_details['job_status'],
+#             job_type=job_details['job_type'],
+#             skills=job_details['skills'],
+#             contract_in_months=job_details['contract_in_months'],
+#             jd_pdf=jd_binary,  # Store the binary data in the database
+#             jd_pdf_present=jd_pdf_present  # Store whether PDF is present
+#         )
+
+#         # Set created date and time
+#         current_datetime = datetime.now(pytz.timezone('Asia/Kolkata'))
+#         new_job_post.date_created = current_datetime.date()
+#         new_job_post.time_created = current_datetime.time()
+        
+#         # Add the new job post to the session and commit
+#         db.session.add(new_job_post)
+#         db.session.commit()
+        
+#         # Generate job_post_id after committing the new_job_post
+#         job_post_id = new_job_post.id
+        
+#         # Add notifications for each recruiter
+#         for recruiter_name in data.get('recruiter', []):
+#             notification = Notification(
+#                 job_post_id=job_post_id,
+#                 recruiter_name=recruiter_name.strip(),
+#                 notification_status=False
+#             )
+#             db.session.add(notification)
+        
+#         db.session.commit()
+
+#         # Send notifications to recruiters
+#         for recruiter_name in data.get('recruiter', []):
+#             recruiter = User.query.filter_by(username=recruiter_name.strip()).first()
+#             if recruiter:
+#                 send_notification(recruiter.email)
+        
+#         # Return the job_id along with the success message
+#         return jsonify({'status': 'success', 'message': 'Job posted successfully', 'job_id': job_post_id}), 200
+
+#     except KeyError as e:
+#         return jsonify({"status": "error", "message": f"KeyError: {e}"})
+
+#     except Exception as e:
+#         return jsonify({"status": "error", "message": str(e)}), 500
+
+# @app.route('/post_job', methods=['POST'])
+# def post_job():
+#     try:
+#         # Accessing the JSON data from the request
+#         data = request.json
+#         user_id = data['user_id']
+#         user = User.query.filter_by(id=user_id).first()
+        
+#         # Check if the user exists
+#         if user:
+#             user_type = user.user_type
+
+#             if user_type == 'management':
+#                 # Extract data from the request
+#                 client = data.get('client')
+#                 experience_min = data.get('experience_min')
+#                 experience_max = data.get('experience_max')
+#                 budget_min = data.get('budget_min')
+#                 budget_max = data.get('budget_max')
+#                 currency_type_min = data.get('currency_type_min')
+#                 currency_type_max = data.get('currency_type_max')
+#                 budget_min = currency_type_min + ' ' + budget_min
+#                 budget_max = currency_type_max + ' ' + budget_max
+#                 location = data.get('location')
+#                 shift_timings = data.get('shift_timings')
+#                 notice_period = data.get('notice_period')
+#                 role = data.get('role')
+#                 detailed_jd = data.get('detailed_jd')
+#                 mode = data.get('mode')
+#                 job_status = data.get('job_status')
+#                 skills = data.get('skills')
+#                 jd_pdf = data.get('jd_pdf')
+
+#                 job_type = data.get('job_type')
+#                 contract_in_months = None  # Initialize the variable here
+#                 if job_type == 'Contract':
+#                     contract_in_months = data.get('Job_Type_details')
+#                     # job_type = job_type + '(' + Job_Type_details + ' Months )'
+#                 else:
+#                     pass
+
+#                 # Decode the base64 encoded PDF file
+#                 jd_binary = None
+#                 jd_pdf_present = False  # Default value
+#                 if jd_pdf:
+#                     try:
+#                         jd_binary = base64.b64decode(jd_pdf)
+#                         jd_pdf_present = bool(jd_binary)  # If jd_binary is not None, set jd_pdf_present to True
+#                     except Exception as e:
+#                         return jsonify({'status': 'error',"message": "Error decoding base64 PDF file", "details": str(e)})
+                        
+#                 recruiter_names = data.get('recruiter', [])
+#                 joined_recruiters = ', '.join(recruiter_names)
+
+#                 # Create a new job post instance
+#                 new_job_post = JobPost(
+#                     client=client,
+#                     experience_min=experience_min,
+#                     experience_max=experience_max,
+#                     budget_min=budget_min,
+#                     budget_max=budget_max,
+#                     location=location,
+#                     shift_timings=shift_timings,
+#                     notice_period=notice_period,
+#                     role=role,
+#                     detailed_jd=detailed_jd,
+#                     recruiter=joined_recruiters,
+#                     management=user.username,
+#                     mode=mode,
+#                     job_status=job_status,
+#                     job_type=job_type,
+#                     skills=skills,
+#                     contract_in_months = contract_in_months,
+#                     jd_pdf=jd_binary,  # Store the binary data in the database
+#                     jd_pdf_present=jd_pdf_present  # Store whether PDF is present
+#                 )
+
+#                 # Created data and time
+#                 current_datetime = datetime.now(pytz.timezone('Asia/Kolkata'))
+#                 new_job_post.date_created = current_datetime.date()
+#                 new_job_post.time_created  = current_datetime.time()
+
+                       
+#                 # Add the new job post to the session and commit
+#                 db.session.add(new_job_post)
+#                 db.session.commit()
+
+#                 # Generate job_post_id after committing the new_job_post
+#                 job_post_id = new_job_post.id
+
+#                 # Add notifications for each recruiter
+#                 recruiter_names = data.get('recruiter', [])
+#                 for recruiter_name in recruiter_names:
+#                     notification = Notification(
+#                         job_post_id=job_post_id,
+#                         recruiter_name=recruiter_name.strip(),
+#                         notification_status=False
+#                     )
+#                     db.session.add(notification)
+
+#                 db.session.commit()
+
+#                 # Return the job_id along with the success message
+#                 return jsonify({'status': 'success',"message": "Job posted successfully", "job_id": job_post_id}), 200
+#             else:
+#                 return jsonify({'status': 'error',"message": "Job post are not add successfully"})
+#         else:
+#             return jsonify({'status': 'error',"message": "User not found"}), 400
+
+#     except KeyError as e:
+#         return jsonify({"error": f"KeyError: {e}"}), 400
+
+#     except Exception as e:
+#         return jsonify({"error": str(e)}), 500
+
+
+
+# @app.route('/post_job', methods=['POST'])
+# def post_job():
+#     try:
+#         # Accessing the JSON data from the request
+#         data = request.json
+#         user_id = data['user_id']
+#         user = User.query.filter_by(id=user_id).first()
+#         print("user :",user)
+#         user_name = user.username
+#         print("user_name:",user_name)
+#         # Check if the "user_name" field exists
+#         if user_name:
+#             user_type = user.user_type
+
+#             if user_type == 'management':
+#                 client = data.get('client')
+#                 experience_min = data.get('experience_min')
+#                 experience_max = data.get('experience_max')
+#                 budget_min = data.get('budget_min')
+#                 budget_max = data.get('budget_max')
+#                 currency_type_min = data.get('currency_type_min')
+#                 currency_type_max = data.get('currency_type_max')
+#                 budget_min = currency_type_min + ' ' + budget_min
+#                 budget_max = currency_type_max + ' ' + budget_max
+#                 location = data.get('location')
+#                 shift_timings = data.get('shift_timings')
+#                 notice_period = data.get('notice_period')
+#                 role = data.get('role')
+#                 detailed_jd = data.get('detailed_jd')
+#                 mode = data.get('mode')
+#                 job_status = data.get('job_status')
+#                 job_type = data.get('job_type')
+#                 skills = data.get('skills')
+#                 jd_pdf = data.get('jd_pdf')
+#                 # jd_binary = base64.b64decode(jd_pdf)
+#                 # # Set jd_pdf_present based on the presence of jd_pdf
+#                 # jd_pdf_present = bool(jd_binary)  # If jd_binary is not None, set jd_pdf_present to True
+
+                
+#                 # # Set jd_pdf_present based on the presence of jd_pdf
+#                 # if jd_binary is not None:
+#                 #     jd_pdf_present = True
+#                 # else:
+#                 #     jd_pdf_present = False
+                    
+                
+#                 # Job_Type_details=data.get('Job_Type_details')
+
+#                 if job_type == 'Contract':
+#                     Job_Type_details = data.get('Job_Type_details')
+#                     job_type = job_type + '(' + Job_Type_details + ' Months )'
+
+                # recruiter_names = data.get('recruiter', [])
+                # joined_recruiters = ', '.join(recruiter_names)
+
+#                 new_job_post = JobPost(
+#                     client=client,
+#                     experience_min=experience_min,
+#                     experience_max=experience_max,
+#                     budget_min=budget_min,
+#                     budget_max=budget_max,
+#                     location=location,
+#                     shift_timings=shift_timings,
+#                     notice_period=notice_period,
+#                     role=role,
+#                     detailed_jd=detailed_jd,
+#                     mode=mode,
+#                     recruiter=joined_recruiters,
+#                     management=user.username,
+#                     job_status=job_status,
+#                     job_type=job_type,
+#                     skills=skills,
+#                     jd_pdf=jd_pdf
+#                     # jd_pdf_present=jd_pdf_present
+#                 )
+
+#                 new_job_post.notification = 'no'
+#                 # new_job_post.date_created = date.today()
+#                 # new_job_post.time_created = datetime.now().time()
+            
+                # # Created data and time
+                # current_datetime = datetime.now(pytz.timezone('Asia/Kolkata'))
+                # new_job_post.date_created = current_datetime.date()
+                # new_job_post.time_created  = current_datetime.time()
+
+#                 # Add the new_job_post to the session and commit to generate the job_post_id
+#                 db.session.add(new_job_post)
+#                 db.session.commit()
+
+#                 # Generate job_post_id after committing the new_job_post
+#                 job_post_id = new_job_post.id
+
+#                 # Define an empty list to hold Notification instances
+#                 notifications = []
+
+#                 for recruiter_name in joined_recruiters.split(','):
+#                     notification_status = False
+#                     notification = Notification(
+#                         job_post_id=job_post_id,  # Add job_post_id to Notification
+#                         recruiter_name=recruiter_name.strip(),
+#                         notification_status=notification_status
+#                     )
+#                     # Append each Notification instance to the notifications list
+#                     notifications.append(notification)
+
+#                 # Add the notifications to the session and commit
+#                 db.session.add_all(notifications)
+#                 db.session.commit()
+#                 notifications = Notification.query.filter_by(job_post_id=job_post_id).all()
+#                 for notification in notifications:
+#                     notification.num_notification += 1
+#                 db.session.commit()
+
+                # # Retrieve the email addresses of the recruiters
+                # recruiter_emails = [recruiter.email for recruiter in User.query.filter(User.username.in_(recruiter_names),
+                #                                                                          User.user_type == 'recruiter',
+                #                                                                          User.is_active == True,
+                #                                                                          User.is_verified == True)]
+                # for email in recruiter_emails:
+                #     send_notification(email)
+
+#                 # Return the job_id along with the success message
+#                 return jsonify({"message": "Job posted successfully", "job_id": job_post_id}), 200
+#             else:
+#                 return jsonify({"error": "Invalid user type"}), 400
+#         else:
+#             return jsonify({"error": "Missing 'user_name' field in the request"}), 400
+
+#     except KeyError as e:
+#         return jsonify({"error": f"KeyError: {e}"}), 400
+
+#     except Exception as e:
+#         return jsonify({"error": str(e)}), 500
 
 
 # @app.route('/post_job', methods=['POST'])
@@ -1986,25 +5997,25 @@ def post_job():
 #                 recruiter_names = data.get('recruiter', [])
 #                 joined_recruiters = ', '.join(recruiter_names)
 
-#                 new_job_post = JobPost(
-#                     client=client,
-#                     experience_min=experience_min,
-#                     experience_max=experience_max,
-#                     budget_min=budget_min,
-#                     budget_max=budget_max,
-#                     location=location,
-#                     shift_timings=shift_timings,
-#                     notice_period=notice_period,
-#                     role=role,
-#                     detailed_jd=detailed_jd,
-#                     mode=mode,
-#                     recruiter=joined_recruiters,
-#                     management=user.username,
-#                     job_status=job_status,
-#                     job_type=job_type,
-#                     skills=skills,
-#                     jd_pdf=jd_pdf
-#                 )
+                # new_job_post = JobPost(
+                #     client=client,
+                #     experience_min=experience_min,
+                #     experience_max=experience_max,
+                #     budget_min=budget_min,
+                #     budget_max=budget_max,
+                #     location=location,
+                #     shift_timings=shift_timings,
+                #     notice_period=notice_period,
+                #     role=role,
+                #     detailed_jd=detailed_jd,
+                #     mode=mode,
+                #     recruiter=joined_recruiters,
+                #     management=user.username,
+                #     job_status=job_status,
+                #     job_type=job_type,
+                #     skills=skills,
+                #     jd_pdf=jd_pdf
+                # )
 
 #                 new_job_post.notification = 'no'
 #                 new_job_post.date_created = date.today()
@@ -2315,7 +6326,7 @@ def update_job_status(job_id):
     user = User.query.filter_by(id=user_id).first()
 
     if not user:
-        return jsonify({"success": False, "error": "User not found"}), 404
+        return jsonify({'status': 'error', "message": "User not found"}), 404
 
     user_type = user.user_type
     username = user.username
@@ -2330,24 +6341,29 @@ def update_job_status(job_id):
 
             # Update the job status
             job_post.job_status = new_job_status
-
+            
+            # Update data_updated_date and data_updated_time
+            # current_datetime = datetime.now(pytz.timezone('Asia/Kolkata')) 
+            # job_post.data_updated_date = current_datetime.date()
+            # job_post.data_updated_time = current_datetime.time()
+            
             # Commit the changes to the database
             db.session.commit()
 
             # Return a JSON response indicating success
-            return jsonify({"success": True, "message": "Job status updated successfully"})
+            return jsonify({'status': 'success', "message": "Job status updated successfully"})
         
         except KeyError:
             # If 'new_job_status' key is missing in form data
-            return jsonify({"success": False, "error": "Missing 'new_job_status' in form data"}), 400
+            return jsonify({'status': 'error', "message": "Missing 'new_job_status' in form data"})
         
         except Exception as e:
             # Handle other exceptions
             db.session.rollback()  # Rollback any changes made to the session
-            return jsonify({"success": False, "error": str(e)}), 500
+            return jsonify({'status': 'error', "message": str(e)})
 
     # If job_post is None (job not found)
-    return jsonify({"success": False, "error": "Job post not found"}), 404
+    return jsonify({'status': 'error', "message": "Job post not found"})
 
 
 
@@ -2356,15 +6372,38 @@ import base64
 
 @app.route('/view_all_jobs', methods=['POST'])
 def view_all_jobs():
-    # Get data from JSON request
     data = request.json
-
-    # Extract any parameters you need from the JSON data
     user_name = data['username']
 
-    # Retrieve all job posts from the database
-    job_posts_active = JobPost.query.filter_by(job_status='Active').order_by(JobPost.id).all()
-    job_posts_hold = JobPost.query.filter_by(job_status='Hold').order_by(JobPost.id).all()
+    # Define case statements for conditional ordering
+    conditional_order_date = case(
+        (JobPost.data_updated_date != None, JobPost.data_updated_date),
+        (JobPost.date_created != None, JobPost.date_created),
+        else_=JobPost.date_created
+    )
+
+    conditional_order_time = case(
+        (JobPost.data_updated_time != None, JobPost.data_updated_time),
+        (JobPost.time_created != None, JobPost.time_created),
+        else_=JobPost.time_created
+    )
+
+    # Retrieve all job posts with conditional ordering
+    job_posts_active = JobPost.query.filter_by(job_status='Active')\
+        .order_by(
+            desc(conditional_order_date),
+            desc(conditional_order_time),
+            desc(JobPost.id)  # Ensure newer posts appear first if dates are equal
+        )\
+        .all()
+
+    job_posts_hold = JobPost.query.filter_by(job_status='Hold')\
+        .order_by(
+            desc(conditional_order_date),
+            desc(conditional_order_time),
+            desc(JobPost.id)  # Ensure newer posts appear first if dates are equal
+        )\
+        .all()
 
     # Construct JSON response
     response_data = {
@@ -2388,12 +6427,13 @@ def view_all_jobs():
                 "management": job_post.management,
                 "job_status": job_post.job_status,
                 "job_type": job_post.job_type,
+                "contract_in_months": job_post.contract_in_months,
                 "skills": job_post.skills,
                 "date_created": str(job_post.date_created),
                 "time_created": str(job_post.time_created),
-                "data_updated_date":str(job_post.data_updated_date),
-                "data_updated_time":str(job_post.data_updated_time)
-                # Include other attributes as needed
+                "data_updated_date": str(job_post.data_updated_date) if job_post.data_updated_date else None,
+                "data_updated_time": str(job_post.data_updated_time) if job_post.data_updated_time else None,
+                "jd_pdf_present": job_post.jd_pdf_present  # Added line
             }
             for job_post in job_posts_active
         ],
@@ -2416,12 +6456,13 @@ def view_all_jobs():
                 "management": job_post.management,
                 "job_status": job_post.job_status,
                 "job_type": job_post.job_type,
+                "contract_in_months": job_post.contract_in_months,
                 "skills": job_post.skills,
                 "date_created": str(job_post.date_created),
                 "time_created": str(job_post.time_created),
-                "data_updated_date":str(job_post.data_updated_date),
-                "data_updated_time":str(job_post.data_updated_time)
-                # Include other attributes as needed
+                "data_updated_date": str(job_post.data_updated_date) if job_post.data_updated_date else None,
+                "data_updated_time": str(job_post.data_updated_time) if job_post.data_updated_time else None,
+                "jd_pdf_present": job_post.jd_pdf_present  # Added line
             }
             for job_post in job_posts_hold
         ]
@@ -2429,7 +6470,189 @@ def view_all_jobs():
 
     # Return JSON response
     return jsonify(response_data)
+    
+# @app.route('/view_all_jobs', methods=['POST'])
+# def view_all_jobs():
+#     data = request.json
+#     user_name = data['username']
 
+#     # Define case statements for conditional ordering
+#     conditional_order_date = case(
+#         (JobPost.data_updated_date != None, JobPost.data_updated_date),
+#         (JobPost.date_created != None, JobPost.date_created),
+#         else_=JobPost.date_created
+#     )
+
+#     conditional_order_time = case(
+#         (JobPost.data_updated_time != None, JobPost.data_updated_time),
+#         (JobPost.time_created != None, JobPost.time_created),
+#         else_=JobPost.time_created
+#     )
+
+#     # Retrieve all job posts with conditional ordering
+#     job_posts_active = JobPost.query.filter_by(job_status='Active')\
+#         .order_by(desc(conditional_order_date),
+#                   desc(conditional_order_time),
+#                   desc(JobPost.date_created),  # Ensure newer posts appear first
+#                   desc(JobPost.time_created),
+#                   desc(JobPost.id))\
+#         .all()
+
+#     job_posts_hold = JobPost.query.filter_by(job_status='Hold')\
+#         .order_by(desc(conditional_order_date),
+#                   desc(conditional_order_time),
+#                   desc(JobPost.date_created),  # Ensure newer posts appear first
+#                   desc(JobPost.time_created),
+#                   desc(JobPost.id))\
+#         .all()
+#     # Construct JSON response
+#     response_data = {
+#         "user_name": user_name,
+#         "job_posts_active": [
+#             {
+#                 "id": job_post.id,
+#                 "client": job_post.client,
+#                 "role": job_post.role,
+#                 "experience_min": job_post.experience_min,
+#                 "experience_max": job_post.experience_max,
+#                 "budget_min": job_post.budget_min,
+#                 "budget_max": job_post.budget_max,
+#                 "location": job_post.location,
+#                 "shift_timings": job_post.shift_timings,
+#                 "notice_period": job_post.notice_period,
+#                 "detailed_jd": job_post.detailed_jd,
+#                 "jd_pdf": base64.b64encode(job_post.jd_pdf).decode('utf-8') if job_post.jd_pdf else None,
+#                 "mode": job_post.mode,
+#                 "recruiter": job_post.recruiter,
+#                 "management": job_post.management,
+#                 "job_status": job_post.job_status,
+#                 "job_type": job_post.job_type,
+#                 "skills": job_post.skills,
+#                 "date_created": str(job_post.date_created),
+#                 "time_created": str(job_post.time_created),
+#                 "data_updated_date": str(job_post.data_updated_date) if job_post.data_updated_date else None,
+#                 "data_updated_time": str(job_post.data_updated_time) if job_post.data_updated_time else None
+#             }
+#             for job_post in job_posts_active
+#         ],
+#         "job_posts_hold": [
+#             {
+#                 "id": job_post.id,
+#                 "client": job_post.client,
+#                 "role": job_post.role,
+#                 "experience_min": job_post.experience_min,
+#                 "experience_max": job_post.experience_max,
+#                 "budget_min": job_post.budget_min,
+#                 "budget_max": job_post.budget_max,
+#                 "location": job_post.location,
+#                 "shift_timings": job_post.shift_timings,
+#                 "notice_period": job_post.notice_period,
+#                 "detailed_jd": job_post.detailed_jd,
+#                 "jd_pdf": base64.b64encode(job_post.jd_pdf).decode('utf-8') if job_post.jd_pdf else None,
+#                 "mode": job_post.mode,
+#                 "recruiter": job_post.recruiter,
+#                 "management": job_post.management,
+#                 "job_status": job_post.job_status,
+#                 "job_type": job_post.job_type,
+#                 "skills": job_post.skills,
+#                 "date_created": str(job_post.date_created),
+#                 "time_created": str(job_post.time_created),
+#                 "data_updated_date": str(job_post.data_updated_date) if job_post.data_updated_date else None,
+#                 "data_updated_time": str(job_post.data_updated_time) if job_post.data_updated_time else None
+#             }
+#             for job_post in job_posts_hold
+#         ]
+#     }
+
+#     # Return JSON response
+#     return jsonify(response_data)
+
+# @app.route('/view_all_jobs', methods=['POST'])
+# def view_all_jobs():
+#     data = request.json
+#     user_name = data['username']
+
+#     # Define case statements for conditional ordering
+#     conditional_order_date = case(
+#         (JobPost.data_updated_date != None, JobPost.data_updated_date),
+#         else_=JobPost.date_created
+#     )
+
+#     conditional_order_time = case(
+#         (JobPost.data_updated_time != None, JobPost.data_updated_time),
+#         else_=JobPost.time_created
+#     )
+
+#     # Retrieve all job posts with conditional ordering
+#     job_posts_active = JobPost.query.filter_by(job_status='Active')\
+#         .order_by(desc(conditional_order_date), desc(conditional_order_time), desc(JobPost.id))\
+#         .all()
+
+#     job_posts_hold = JobPost.query.filter_by(job_status='Hold')\
+#         .order_by(desc(conditional_order_date), desc(conditional_order_time), desc(JobPost.id))\
+#         .all()
+
+#     # Construct JSON response
+#     response_data = {
+#         "user_name": user_name,
+#         "job_posts_active": [
+#             {
+#                 "id": job_post.id,
+#                 "client": job_post.client,
+#                 "role": job_post.role,
+#                 "experience_min": job_post.experience_min,
+#                 "experience_max": job_post.experience_max,
+#                 "budget_min": job_post.budget_min,
+#                 "budget_max": job_post.budget_max,
+#                 "location": job_post.location,
+#                 "shift_timings": job_post.shift_timings,
+#                 "notice_period": job_post.notice_period,
+#                 "detailed_jd": job_post.detailed_jd,
+#                 "jd_pdf": base64.b64encode(job_post.jd_pdf).decode('utf-8') if job_post.jd_pdf else None,
+#                 "mode": job_post.mode,
+#                 "recruiter": job_post.recruiter,
+#                 "management": job_post.management,
+#                 "job_status": job_post.job_status,
+#                 "job_type": job_post.job_type,
+#                 "skills": job_post.skills,
+#                 "date_created": str(job_post.date_created),
+#                 "time_created": str(job_post.time_created),
+#                 "data_updated_date": str(job_post.data_updated_date) if job_post.data_updated_date else None,
+#                 "data_updated_time": str(job_post.data_updated_time) if job_post.data_updated_time else None
+#             }
+#             for job_post in job_posts_active
+#         ],
+#         "job_posts_hold": [
+#             {
+#                 "id": job_post.id,
+#                 "client": job_post.client,
+#                 "role": job_post.role,
+#                 "experience_min": job_post.experience_min,
+#                 "experience_max": job_post.experience_max,
+#                 "budget_min": job_post.budget_min,
+#                 "budget_max": job_post.budget_max,
+#                 "location": job_post.location,
+#                 "shift_timings": job_post.shift_timings,
+#                 "notice_period": job_post.notice_period,
+#                 "detailed_jd": job_post.detailed_jd,
+#                 "jd_pdf": base64.b64encode(job_post.jd_pdf).decode('utf-8') if job_post.jd_pdf else None,
+#                 "mode": job_post.mode,
+#                 "recruiter": job_post.recruiter,
+#                 "management": job_post.management,
+#                 "job_status": job_post.job_status,
+#                 "job_type": job_post.job_type,
+#                 "skills": job_post.skills,
+#                 "date_created": str(job_post.date_created),
+#                 "time_created": str(job_post.time_created),
+#                 "data_updated_date": str(job_post.data_updated_date) if job_post.data_updated_date else None,
+#                 "data_updated_time": str(job_post.data_updated_time) if job_post.data_updated_time else None
+#             }
+#             for job_post in job_posts_hold
+#         ]
+#     }
+
+#     # Return JSON response
+#     return jsonify(response_data)
 
 # @app.route('/view_all_jobs', methods=['POST'])
 # def view_all_jobs():
@@ -2460,6 +6683,7 @@ def view_all_jobs():
 #                 "notice_period": job_post.notice_period,
 #                 "detailed_jd": job_post.detailed_jd,
 #                 "jd_pdf": base64.b64encode(job_post.jd_pdf).decode('utf-8') if job_post.jd_pdf else None,
+#                 # "jd_pdf": job_post.jd_pdf ,
 #                 "mode": job_post.mode,
 #                 "recruiter": job_post.recruiter,
 #                 "management": job_post.management,
@@ -2469,7 +6693,7 @@ def view_all_jobs():
 #                 "date_created": str(job_post.date_created),
 #                 "time_created": str(job_post.time_created),
 #                 "data_updated_date":str(job_post.data_updated_date),
-#                 "data_updated_time":str(jobs_post.data_updated_time)
+#                 "data_updated_time":str(job_post.data_updated_time)
 #                 # Include other attributes as needed
 #             }
 #             for job_post in job_posts_active
@@ -2488,6 +6712,7 @@ def view_all_jobs():
 #                 "notice_period": job_post.notice_period,
 #                 "detailed_jd": job_post.detailed_jd,
 #                 "jd_pdf": base64.b64encode(job_post.jd_pdf).decode('utf-8') if job_post.jd_pdf else None,
+#                 # "jd_pdf": job_post.jd_pdf ,
 #                 "mode": job_post.mode,
 #                 "recruiter": job_post.recruiter,
 #                 "management": job_post.management,
@@ -2497,7 +6722,7 @@ def view_all_jobs():
 #                 "date_created": str(job_post.date_created),
 #                 "time_created": str(job_post.time_created),
 #                 "data_updated_date":str(job_post.data_updated_date),
-#                 "data_updated_time":str(jobs_post.data_updated_time)
+#                 "data_updated_time":str(job_post.data_updated_time)
 #                 # Include other attributes as needed
 #             }
 #             for job_post in job_posts_hold
@@ -2507,10 +6732,12 @@ def view_all_jobs():
 #     # Return JSON response
 #     return jsonify(response_data)
 
-def send_notification(recruiter_email):
-    msg = Message('New Job Posted', sender='ganesh.s@makonissoft.com', recipients=[recruiter_email])
-    msg.body = 'A new job has been posted. Check your dashboard for more details.'
-    mail.send(msg)
+
+
+# def send_notification(recruiter_email):
+#     msg = Message('New Job Posted', sender='ganesh.s@makonissoft.com', recipients=[recruiter_email])
+#     msg.body = 'A new job has been posted. Check your dashboard for more details.'
+#     mail.send(msg)
 
 @app.route('/other_job_posts', methods=['GET'])
 def other_job_posts():
@@ -2571,23 +6798,26 @@ def other_job_posts():
 import base64
 import io
 import magic
+from flask import Flask, send_file, request
 
 @app.route('/view_resume/<int:candidate_id>', methods=['GET'])
 def view_resume(candidate_id):
     # Retrieve the resume data from the database using SQLAlchemy
     candidate = Candidate.query.filter_by(id=candidate_id).first()
     if not candidate:
-        return 'Candidate not found'
-    # Decode the base64 encoded resume data
-    print("candidate.resume",candidate.resume.tobytes())
-    if "==" not in str(candidate.resume.tobytes()):
-        if request.args.get('decode') == 'base64':
-            # Decode the base64 encoded resume data
-            decoded_resume = base64.b64decode(candidate.resume)
-            resume_binary = decoded_resume
+        return 'Candidate not found', 404
+
+    if candidate.resume is None:
+        return 'Resume not found for this candidate', 404
+
+    try:
+        # If the resume data is a base64 encoded string, decode it
+        if isinstance(candidate.resume, str):
+            resume_binary = base64.b64decode(candidate.resume)
+        elif isinstance(candidate.resume, bytes):
+            resume_binary = candidate.resume
         else:
-            # Retrieve the resume binary data from the database
-            resume_binary = candidate.resume.tobytes()  # Convert memoryview to bytes
+            return 'Invalid resume format', 400
 
         # Determine the mimetype based on the file content
         is_pdf = resume_binary.startswith(b"%PDF")
@@ -2599,20 +6829,162 @@ def view_resume(candidate_id):
             mimetype=mimetype,
             as_attachment=False
         )
-    else:
-        decoded_resume = base64.b64decode(candidate.resume)
-        # Create a file-like object (BytesIO) from the decoded resume data
-        resume_file = io.BytesIO(decoded_resume)
-        # Determine the mimetype based on the file content
-        is_pdf = decoded_resume.startswith(b"%PDF")
-        mimetype = 'application/pdf' if is_pdf else 'application/msword'
+    except Exception as e:
+        return f'Error processing resume: {str(e)}', 500
 
-        # Send the file as a response
-        return send_file(
-            resume_file,
-            mimetype=mimetype,
-            as_attachment=False
-        )
+# @app.route('/view_resume/<int:candidate_id>', methods=['GET'])
+# def view_resume(candidate_id):
+#     # Retrieve the resume data from the database using SQLAlchemy
+#     candidate = Candidate.query.filter_by(id=candidate_id).first()
+#     if not candidate:
+#         return 'Candidate not found'
+
+#     if candidate.resume is None:
+#         return 'Resume not found for this candidate', 404
+
+#     if isinstance(candidate.resume, bytes):
+#         # If the resume data is already in bytes format
+#         resume_binary = candidate.resume
+#     else:
+#         # If the resume data is base64 encoded, decode it
+#         decoded_resume = base64.b64decode(candidate.resume)
+#         resume_binary = decoded_resume
+
+#     # Determine the mimetype based on the file content
+#     is_pdf = resume_binary.startswith(b"%PDF")
+#     mimetype = 'application/pdf' if is_pdf else 'application/msword'
+
+#     if "==" not in str(candidate.resume):  # assuming you are checking for base64 here
+#         # If the resume data is not base64 encoded, send it directly
+#         return send_file(
+#             io.BytesIO(resume_binary),
+#             mimetype=mimetype,
+#             as_attachment=False
+#         )
+#     else:
+#         # If the resume data is base64 encoded, create a file-like object from the decoded data and send it
+#         resume_file = io.BytesIO(resume_binary)
+#         return send_file(
+#             resume_file,
+#             mimetype=mimetype,
+#             as_attachment=False
+#         )
+
+# @app.route('/view_resume/<int:candidate_id>', methods=['GET'])
+# def view_resume(candidate_id):
+#     # Retrieve the resume data from the database using SQLAlchemy
+#     candidate = Candidate.query.filter_by(id=candidate_id).first()
+#     if not candidate:
+#         return 'Candidate not found', 404
+
+#     print("Candidate resume:", candidate.resume)  # Check the resume data
+#     print("Resume type:", type(candidate.resume))  # Check the type of resume data
+
+#     if isinstance(candidate.resume, bytes):
+#         # If the resume data is already in bytes format
+#         resume_binary = candidate.resume
+#     else:
+#         # If the resume data is base64 encoded, decode it
+#         resume_binary = base64.b64decode(candidate.resume)
+
+#     print("Resume binary:", resume_binary)  # Check the binary data
+
+#     # Determine the mimetype based on the file content
+#     is_pdf = resume_binary.startswith(b"%PDF")
+#     mimetype = 'application/pdf' if is_pdf else 'application/msword'
+
+#     if "==" not in str(candidate.resume):  # assuming you are checking for base64 here
+#         # If the resume data is not base64 encoded, send it directly
+#         return send_file(
+#             io.BytesIO(resume_binary),
+#             mimetype=mimetype,
+#             as_attachment=False
+#         )
+#     else:
+#         # If the resume data is base64 encoded, create a file-like object from the decoded data and send it
+#         resume_file = io.BytesIO(resume_binary)
+#         return send_file(
+#             resume_file,
+#             mimetype=mimetype,
+#             as_attachment=False
+#         )
+
+
+# @app.route('/view_resume/<int:candidate_id>', methods=['GET'])
+# def view_resume(candidate_id):
+#     # Retrieve the resume data from the database using SQLAlchemy
+#     candidate = Candidate.query.filter_by(id=candidate_id).first()
+#     if not candidate:
+#         return 'Candidate not found', 404
+
+#     if isinstance(candidate.resume, bytes):
+#         # If the resume data is already in bytes format
+#         resume_binary = candidate.resume
+#     else:
+#         # If the resume data is base64 encoded, decode it
+#         resume_binary = base64.b64decode(candidate.resume)
+
+#     # Determine the mimetype based on the file content
+#     is_pdf = resume_binary.startswith(b"%PDF")
+#     mimetype = 'application/pdf' if is_pdf else 'application/msword'
+
+#     if "==" not in str(candidate.resume):  # assuming you are checking for base64 here
+#         # If the resume data is not base64 encoded, send it directly
+#         return send_file(
+#             io.BytesIO(resume_binary),
+#             mimetype=mimetype,
+#             as_attachment=False
+#         )
+#     else:
+#         # If the resume data is base64 encoded, create a file-like object from the decoded data and send it
+#         resume_file = io.BytesIO(resume_binary)
+#         return send_file(
+#             resume_file,
+#             mimetype=mimetype,
+#             as_attachment=False
+#         )
+
+# @app.route('/view_resume/<int:candidate_id>', methods=['GET'])
+# def view_resume(candidate_id):
+#     # Retrieve the resume data from the database using SQLAlchemy
+#     candidate = Candidate.query.filter_by(id=candidate_id).first()
+#     if not candidate:
+#         return 'Candidate not found'
+#     # Decode the base64 encoded resume data
+#     # print("candidate.resume",candidate.resume.tobytes())
+#     if "==" not in str(candidate.resume.tobytes()):
+#         if request.args.get('decode') == 'base64':
+#             # Decode the base64 encoded resume data
+#             decoded_resume = base64.b64decode(candidate.resume)
+#             resume_binary = decoded_resume
+#         else:
+#             # Retrieve the resume binary data from the database
+#             resume_binary = candidate.resume.tobytes()  # Convert memoryview to bytes
+
+#         # Determine the mimetype based on the file content
+#         is_pdf = resume_binary.startswith(b"%PDF")
+#         mimetype = 'application/pdf' if is_pdf else 'application/msword'
+
+#         # Send the file as a response
+#         return send_file(
+#             io.BytesIO(resume_binary),
+#             mimetype=mimetype,
+#             as_attachment=False
+#         )
+#     else:
+#         decoded_resume = base64.b64decode(candidate.resume)
+#         # Create a file-like object (BytesIO) from the decoded resume data
+#         resume_file = io.BytesIO(decoded_resume)
+#         # Determine the mimetype based on the file content
+#         is_pdf = decoded_resume.startswith(b"%PDF")
+#         mimetype = 'application/pdf' if is_pdf else 'application/msword'
+
+#         # Send the file as a response
+#         return send_file(
+#             resume_file,
+#             mimetype=mimetype,
+#             as_attachment=False
+#         )
 
 
 
@@ -2762,15 +7134,43 @@ def view_resume(candidate_id):
 
 #     return jsonify({'message': 'Image updated successfully'}), 200
 
+# @app.route('/upload_user_image/<int:user_id>', methods=['POST'])
+# def upload_user_image(user_id):
+#     try:
+#         # Extract file from request
+#         data=request.json
+#         image_file = data['image']
+#         filename = data['filename']
+#         image_delete_status=data['image_delete_status']
+        
+#         # Find the user by user_id
+#         user = User.query.get(user_id)
+#         if not user:
+#             return jsonify({'error': 'User not found'}), 404
+
+#         # Update user's filename and image content
+#         user.filename = filename
+#         user.image_file = image_file  # Store image content as binary data
+#         user.image_deleted=image_delete_status
+#         # Commit changes to the database
+#         db.session.commit()
+
+#         return jsonify({'message': 'Image updated successfully'}), 200
+#     except Exception as e:
+#         return jsonify({'error': str(e)}), 500
+
 @app.route('/upload_user_image/<int:user_id>', methods=['POST'])
 def upload_user_image(user_id):
     try:
-        # Extract file from request
-        data=request.json
-        image_file = data['image']
+        # Extract data from the request
+        data = request.json
+        image_base64 = data['image']
         filename = data['filename']
-        image_delete_status=data['image_delete_status']
-        
+        image_delete_status = data['image_delete_status']
+
+        # Decode the base64 image
+        image_binary = base64.b64decode(image_base64)
+
         # Find the user by user_id
         user = User.query.get(user_id)
         if not user:
@@ -2778,8 +7178,9 @@ def upload_user_image(user_id):
 
         # Update user's filename and image content
         user.filename = filename
-        user.image_file = image_file  # Store image content as binary data
-        user.image_deleted=image_delete_status
+        user.image_file = image_binary  # Store image content as binary data
+        user.image_deleted = image_delete_status
+
         # Commit changes to the database
         db.session.commit()
 
@@ -2834,24 +7235,107 @@ import base64
 from PIL import Image
 import mimetypes
 
+from flask import send_file, jsonify
+
+# @app.route('/user_image/<int:user_id>', methods=['GET'])
+# def user_image(user_id):
+#     # Retrieve the user data from the database
+#     user = User.query.filter_by(id=user_id).first()
+#     if not user or not user.image_file:
+#         return jsonify({'message': 'Image not found'}), 400
+    
+#     # Decode the bytea image data
+#     image_data = base64.b64decode(user.image_file)
+    
+#     # Determine the MIME type
+#     image = Image.open(io.BytesIO(image_data))
+#     mime_type = Image.MIME.get(image.format)
+    
+#     # Get the original filename from the user object
+#     filename = user.filename
+    
+#     # Send the file as inline content with filename
+#     return send_file(
+#         io.BytesIO(image_data),
+#         mimetype=mime_type,
+#         as_attachment=False,
+#         attachment_filename=filename  # Set the filename in the response headers
+#     )
+
+# @app.route('/user_image/<int:user_id>', methods=['GET'])
+# def user_image(user_id):
+#     # Retrieve the user data from the database
+#     user = User.query.filter_by(id=user_id).first()
+#     if not user or not user.image_file:
+#         return jsonify({'message': 'Image not found'}), 400
+    
+#     # Decode the bytea image data
+#     image_data = base64.b64decode(user.image_file)
+    
+#     # Determine the MIME type
+#     image = Image.open(io.BytesIO(image_data))
+#     mime_type = Image.MIME.get(image.format)
+    
+#     # Send the file as inline content
+#     return send_file(
+#         io.BytesIO(image_data),
+#         mimetype=mime_type,
+#         as_attachment=False
+#     )
+
+
+# @app.route('/user_image/<int:user_id>', methods=['GET'])
+# def user_image(user_id):
+#     # Retrieve the user data from the database
+#     user = User.query.filter_by(id=user_id).first()
+#     if not user or not user.image_file:
+#         return jsonify({'message': 'Image not found'}), 400
+    
+#     # Decode the bytea image data
+#     image_data = base64.b64decode(user.image_file)
+    
+#     # Determine the MIME type
+#     image = Image.open(io.BytesIO(image_data))
+#     mime_type = Image.MIME.get(image.format)
+    
+#     # Send the file as a response
+#     return send_file(
+#         io.BytesIO(image_data),
+#         mimetype=mime_type,
+#         as_attachment=False
+#     )
+
+import io
+import base64
+import imghdr
 @app.route('/user_image/<int:user_id>', methods=['GET'])
 def user_image(user_id):
     # Retrieve the user data from the database
     user = User.query.filter_by(id=user_id).first()
     if not user or not user.image_file:
-        return jsonify({'message': 'Image not found'}), 400
+        return jsonify({'message': 'Image not found'}), 404
     
-    # Decode the bytea image data
-    image_data = base64.b64decode(user.image_file)
+    # Get the image data from the user object
+    image_data = user.image_file
     
-    # Determine the MIME type
-    image = Image.open(io.BytesIO(image_data))
-    mime_type = Image.MIME.get(image.format)
+    # Determine the image format dynamically
+    image_format = imghdr.what(None, h=image_data)
+    if not image_format:
+        return jsonify({'error': 'Unknown image format'}), 500
+    
+    # Determine the MIME type based on the image format
+    if image_format == 'jpeg':
+        mimetype = 'image/jpeg'
+    elif image_format == 'png':
+        mimetype = 'image/png'
+    else:
+        # Handle other image formats as needed
+        return jsonify({'error': 'Unsupported image format'}), 500
     
     # Send the file as a response
     return send_file(
         io.BytesIO(image_data),
-        mimetype=mime_type,
+        mimetype=mimetype,
         as_attachment=False
     )
 
@@ -3044,14 +7528,14 @@ def assign_job(job_id):
     user = User.query.filter_by(id=user_id).first()
 
     if not user:
-        return jsonify({"error_message": "User not found"}), 404
+        return jsonify({'status': 'error',"message": "User not found"})
 
     user_type = user.user_type
     username = user.username
     job_post = JobPost.query.get(job_id)  # Retrieve the job post by its ID
 
     if not job_post:
-        return jsonify({"error_message": "Job not found"}), 404
+        return jsonify({'status': 'success',"message": "Job not found"})
 
     current_recruiters = job_post.recruiter.split(', ') if job_post.recruiter else []
 
@@ -3064,6 +7548,12 @@ def assign_job(job_id):
         # Join the recruiter names into a single string
         joined_recruiters = ', '.join(updated_recruiter_names)
         job_post.recruiter = joined_recruiters
+        
+        # Update data_updated_date and data_updated_time
+        # current_datetime = datetime.now(pytz.timezone('Asia/Kolkata'))
+        # job_post.data_updated_date = current_datetime.date()
+        # job_post.data_updated_time = current_datetime.time()
+
         db.session.commit()
 
         # Send notification emails to the newly assigned recruiters
@@ -3091,7 +7581,7 @@ def assign_job(job_id):
         db.session.add_all(notifications)
         db.session.commit()
 
-        return jsonify({"message": "Job re-assigned successfully"}), 200
+        return jsonify({'status': 'success',"message": "Job re-assigned successfully"}), 200
 
     recruiter_names = [recruiter.name for recruiter in User.query.filter_by(user_type='recruiter')]
     return jsonify({
@@ -3100,6 +7590,70 @@ def assign_job(job_id):
         "current_recruiters": current_recruiters,
         "recruiters": recruiter_names
     })
+
+# @app.route('/assign_job/<int:job_id>', methods=['POST'])
+# def assign_job(job_id):
+#     data = request.json
+#     user_id = data['user_id']
+#     user = User.query.filter_by(id=user_id).first()
+
+#     if not user:
+#         return jsonify({"error_message": "User not found"}), 404
+
+#     user_type = user.user_type
+#     username = user.username
+#     job_post = JobPost.query.get(job_id)  # Retrieve the job post by its ID
+
+#     if not job_post:
+#         return jsonify({"error_message": "Job not found"}), 404
+
+#     current_recruiters = job_post.recruiter.split(', ') if job_post.recruiter else []
+
+#     if request.method == 'POST':
+#         new_recruiter_names = data.get('recruiters', [])
+        
+#         # Modification: Remove duplicate recruiters by combining lists and converting to a set
+#         updated_recruiter_names = list(set(current_recruiters + new_recruiter_names))
+        
+#         # Join the recruiter names into a single string
+#         joined_recruiters = ', '.join(updated_recruiter_names)
+#         job_post.recruiter = joined_recruiters
+#         db.session.commit()
+
+#         # Send notification emails to the newly assigned recruiters
+#         new_recruiter_emails = [recruiter.email for recruiter in
+#                                 User.query.filter(User.name.in_(new_recruiter_names),
+#                                                   User.user_type == 'recruiter')]
+#         for email in new_recruiter_emails:
+#             send_notification(email)
+
+#         # Define an empty list to hold Notification instances
+#         notifications = []
+
+#         for recruiter_name in updated_recruiter_names:
+#             if recruiter_name.strip() in new_recruiter_names:
+#                 notification_status = False  # Set the initial status
+#                 notification = Notification(
+#                     job_post_id=job_post.id,
+#                     recruiter_name=recruiter_name.strip(),
+#                     notification_status=notification_status
+#                 )
+#                 # Append each Notification instance to the notifications list
+#                 notifications.append(notification)
+
+#         # Commit the notifications to the database session
+#         db.session.add_all(notifications)
+#         db.session.commit()
+
+#         return jsonify({"message": "Job re-assigned successfully"}), 200
+
+#     recruiter_names = [recruiter.name for recruiter in User.query.filter_by(user_type='recruiter')]
+#     return jsonify({
+#         "user_name": username,
+#         "job_post": job_post.serialize(),
+#         "current_recruiters": current_recruiters,
+#         "recruiters": recruiter_names
+#     })
 
 
 # @app.route('/assign_job/<int:job_id>', methods=['POST'])
@@ -3322,38 +7876,131 @@ from flask import jsonify
 def deactivate_user():
     data = request.json
     management_user_id = data.get('user_id')
-    recruiter_username = data.get('user_name')
+    username = data.get('user_name')
     user_status = data.get('user_status')
 
-    if management_user_id and recruiter_username:  
+    if management_user_id:
         # Find the management user
         management_user = User.query.get(management_user_id)
 
         if management_user and management_user.user_type == 'management':
-            # Find the recruiter user by username
-            recruiter_user = User.query.filter_by(username=recruiter_username, user_type='recruiter').first()
+            messages = []
 
-            if recruiter_user:
-                # Change active status for the recruiter user
-                recruiter_user.is_verified = user_status
-                db.session.commit()
+            if username:
+                # Find the target user by username
+                target_user = User.query.filter_by(username=username).first()
 
+                if target_user:
+                    if target_user.user_type == 'management' or target_user.user_type == 'recruiter':
+                        # Update user account status
+                        target_user.is_active = user_status
+                        db.session.commit()
+
+                        # Determine the message based on user_status
+                        if user_status:
+                            messages.append(f'{target_user.user_type.capitalize()} account {username} has been successfully activated.')
+                        else:
+                            messages.append(f'{target_user.user_type.capitalize()} account {username} has been successfully deactivated.')
+                    else:
+                        messages.append('User is neither a management nor a recruiter account.')
+                else:
+                    messages.append('User not found.')
+
+            if messages:
                 # Get all user records
                 all_users = User.query.all()
-                
-                # Construct response data
-                user_data = [{'id': user.id, 'username': user.username, 'is_active': user.is_verified} for user in all_users]
-
-                if user_status:
-                    return jsonify({'message': f'Recruiter account {recruiter_username} has been successfully activated.', 'users': user_data})
-                else:
-                    return jsonify({'message': f'Recruiter account {recruiter_username} has been successfully deactivated.', 'users': user_data})
+                user_data = [{'id': user.id, 'username': user.username, 'is_active': user.is_active} for user in all_users]
+                return jsonify({'messages': messages, 'users': user_data})
             else:
-                return jsonify({'message': 'Recruiter user not found or not a recruiter user'})
+                return jsonify({'message': 'No valid username provided.'})
         else:
-            return jsonify({'message': 'Management user not found or not a management user'})
+            return jsonify({'message': 'Management user not found or not a management user.'})
     else:
-        return jsonify({'message': 'Both management_user_id and recruiter_username are required'})
+        return jsonify({'message': 'Management user_id is required.'})
+
+
+# @app.route('/deactivate_user', methods=['POST'])
+# def deactivate_user():
+#     data = request.json
+#     management_user_id = data.get('user_id')
+#     username = data.get('user_name')
+#     user_status=data.get('user_status')
+
+#     if management_user_id:
+#         # Find the management user
+#         management_user = User.query.get(management_user_id)
+
+#         if management_user and management_user.user_type == 'management':
+#             messages = []
+
+#             if username:
+#                 # Find the target user by username
+#                 target_user = User.query.filter_by(username=username).first()
+
+#                 if target_user:
+#                     if target_user.user_type == 'management':
+#                         # Deactivate management account
+#                         target_user.is_active = user_status
+#                         db.session.commit()
+#                         messages.append(f'Management account {username} has been successfully deactivated.')
+#                     elif target_user.user_type == 'recruiter':
+#                         # Deactivate recruiter account
+#                         target_user.is_active = user_status
+#                         db.session.commit()
+#                         messages.append(f'Recruiter account {username} has been successfully deactivated.')
+#                     else:
+#                         messages.append('User is neither a management nor a recruiter account.')
+#                 else:
+#                     messages.append('User not found.')
+
+#             if messages:
+#                 # Get all user records
+#                 all_users = User.query.all()
+#                 user_data = [{'id': user.id, 'username': user.username, 'is_active': user.is_active} for user in all_users]
+#                 return jsonify({'messages': messages, 'users': user_data})
+#             else:
+#                 return jsonify({'message': 'No valid username provided.'})
+#         else:
+#             return jsonify({'message': 'Management user not found or not a management user.'})
+#     else:
+#         return jsonify({'message': 'Management user_id is required.'})
+
+# @app.route('/deactivate_user', methods=['POST'])
+# def deactivate_user():
+#     data = request.json
+#     management_user_id = data.get('user_id')
+#     recruiter_username = data.get('user_name')
+#     user_status = data.get('user_status')
+
+#     if management_user_id and recruiter_username:  
+#         # Find the management user
+#         management_user = User.query.get(management_user_id)
+
+#         if management_user and management_user.user_type == 'management':
+#             # Find the recruiter user by username
+#             recruiter_user = User.query.filter_by(username=recruiter_username, user_type='recruiter').first()
+
+#             if recruiter_user:
+#                 # Change active status for the recruiter user
+#                 recruiter_user.is_active = user_status
+#                 db.session.commit()
+
+#                 # Get all user records
+#                 all_users = User.query.all()
+                
+#                 # Construct response data
+#                 user_data = [{'id': user.id, 'username': user.username, 'is_active': user.is_verified} for user in all_users]
+
+#                 if user_status:
+#                     return jsonify({'message': f'Recruiter account {recruiter_username} has been successfully activated.', 'users': user_data})
+#                 else:
+#                     return jsonify({'message': f'Recruiter account {recruiter_username} has been successfully deactivated.', 'users': user_data})
+#             else:
+#                 return jsonify({'message': 'Recruiter user not found or not a recruiter user'})
+#         else:
+#             return jsonify({'message': 'Management user not found or not a management user'})
+#     else:
+#         return jsonify({'message': 'Both management_user_id and recruiter_username are required'})
 
 
         
@@ -3403,19 +8050,20 @@ def change_password():
                         mail.send(msg)
 
                         if user_type == 'management':
-                            return jsonify({"message": "Password changed successfully for management user."})
+                            return jsonify({'status': 'success',"message": "Password changed successfully for management user."})
                         else:
-                            return jsonify({"message": "Password changed successfully for regular user."})
+                            return jsonify({'status': 'success',"message": "Password changed successfully for recruiter user."})
                     else:
-                        return jsonify({"message": "New password and confirm password do not match."}) 
+                        return jsonify({'status': 'error',"message": "New password and confirm password do not match."}) 
                 else:
-                    return jsonify({"message": "Invalid old password."})
+                    return jsonify({'status': 'error',"message": "Invalid old password."})
             else:
-                return jsonify({"message": "Logged in user does not match the provided username."})
+                # return jsonify({'status': 'error',"message": "Logged in user does not match the provided username."})
+                 return jsonify({'status': 'error',"message": "User not found."})
         else:
-            return jsonify({"message": "User not found."})
+            return jsonify({'status': 'error',"message": "User not found."})
     else:
-        return jsonify({"message": "No JSON data provided."})
+        return jsonify({'status': 'error',"message": "No JSON data provided."})
 
     # return jsonify({"error": "Unauthorized: You must log in to access this page"})
 
@@ -3428,17 +8076,79 @@ def delete_job_post_message(job_id):
     role = job_post.role
     return redirect(url_for('view_all_jobs',client=client,role=role,id=id))
 
+
 @app.route('/delete_job_post/<int:job_id>', methods=['POST'])
 def delete_job_post(job_id):
-    # data=request.json
-    # job_id=data['job_id']
+    # Fetch the job post
     job_post = JobPost.query.get(job_id)
-    if job_post:
-        JobPost.query.filter_by(id=job_id).delete()
-        db.session.commit()
-        return jsonify({"message": "Job Post Deleted Successfully"}), 200
+    
+    if not job_post:
+        return jsonify({'status': 'error',"message": "Job Post not found"}), 404
+
+    # Fetch all notifications related to the job post
+    notifications = Notification.query.filter_by(job_post_id=job_id).all()
+
+    if notifications:
+        try:
+            # Delete all associated notifications first
+            for notification in notifications:
+                db.session.delete(notification)
+            db.session.commit()
+            
+            # Now delete the job post
+            db.session.delete(job_post)
+            db.session.commit()
+            
+            return jsonify({'status': 'success',"message": "Job Post and Notifications Deleted Successfully"})
+        except Exception as e:
+            # Handle any potential exceptions
+            db.session.rollback()
+            return jsonify({'status': 'error',"message": "An error occurred while deleting job post and notifications"})
     else:
-        return jsonify({"error": "Job Post not found"}), 404
+        # No notifications found for the job post
+        # Delete only the job post
+        db.session.delete(job_post)
+        db.session.commit()
+        return jsonify({'status': 'success',"message": "Job Post and Notifications Deleted Successfully"})
+        # return jsonify({'status': 'success',"message": "Job Post Deleted Successfully. No associated notifications found."}), 200
+
+
+# @app.route('/delete_job_post/<int:job_id>', methods=['POST'])
+# def delete_job_post(job_id):
+#     # Fetch the job post
+#     job_post = JobPost.query.get(job_id)
+    
+#     if not job_post:
+#         return jsonify({"error": "Job Post not found"}), 404
+
+#     # Fetch all notifications related to the job post
+#     notifications = Notification.query.filter_by(job_post_id=job_id).all()
+
+#     if notifications:
+#         # Delete the job post and all associated notifications
+#         db.session.delete(job_post)
+#         for notification in notifications:
+#             db.session.delete(notification)
+#         db.session.commit()
+#         return jsonify({"message": "Job Post and Notifications Deleted Successfully"}), 200
+#     else:
+#         # No notifications found for the job post
+#         # Delete only the job post
+#         db.session.delete(job_post)
+#         db.session.commit()
+#         return jsonify({"message": "Job Post Deleted Successfully. No associated notifications found."}), 200
+
+# @app.route('/delete_job_post/<int:job_id>', methods=['POST'])
+# def delete_job_post(job_id):
+#     # data=request.json
+#     # job_id=data['job_id']
+#     job_post = JobPost.query.get(job_id)
+#     if job_post:
+#         JobPost.query.filter_by(id=job_id).delete()
+#         db.session.commit()
+#         return jsonify({"message": "Job Post Deleted Successfully"}), 200
+#     else:
+#         return jsonify({"error": "Job Post not found"}), 404
 
 @app.route('/download_jd/<int:job_id>')
 def download_jd(job_id):
@@ -3637,47 +8347,80 @@ from flask import send_file
 #     else:
 #         return 'JD PDF not available', 404  # Return 404 Not Found status if JD PDF is not available
 
-import magic
 
 @app.route('/view_jd/<int:job_id>', methods=['GET'])
 def view_jd(job_id):
-    # Retrieve the job post data from the database using SQLAlchemy
+    # Retrieve the resume data from the database using SQLAlchemy
     jobpost = JobPost.query.filter_by(id=job_id).first()
     if not jobpost:
         return 'Job post not found', 404  # Return 404 Not Found status
-    
-    # Check if the job post contains a JD PDF
-    if jobpost.jd_pdf:
-        # Decode the base64 string back to its original binary data
-        jd_binary = base64.b64decode(jobpost.jd_pdf)
- 
-        # Create a file-like object (BytesIO) from the decoded binary data
-        jd_file = io.BytesIO(jd_binary)
- 
-        # Detect the mimetype using more complex logic
-        mimetype = detect_mimetype(jd_binary)
- 
-        # Return the file as a response
+
+    if jobpost.jd_pdf is None:
+        return 'jd_pdf not found for this job', 404
+
+    try:
+        # If the resume data is a base64 encoded string, decode it
+        if isinstance(jobpost.jd_pdf, str):
+            jd_pdf_binary = base64.b64decode(jobpost.jd_pdf)
+        elif isinstance(jobpost.jd_pdf, bytes):
+            jd_pdf_binary = jobpost.jd_pdf
+        else:
+            return 'Invalid jd_pdf format', 400
+
+        # Determine the mimetype based on the file content
+        is_pdf = jd_pdf_binary.startswith(b"%PDF")
+        mimetype = 'application/pdf' if is_pdf else 'application/msword'
+
+        # Send the file as a response
         return send_file(
-            jd_file,
+            io.BytesIO(jd_pdf_binary),
             mimetype=mimetype,
             as_attachment=False
         )
-    else:
-        return 'JD PDF not available', 404  # Return 404 Not Found status if JD PDF is not available
+    except Exception as e:
+        return f'Error processing resume: {str(e)}', 500
 
-def detect_mimetype(data):
-    # Check for PDF magic number
-    if data.startswith(b"%PDF"):
-        return 'application/pdf'
-    # Check for MS Word magic number
-    elif data.startswith(b"\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1"):
-        return 'application/msword'
-    # Add more checks for other file types if needed
-    else:
-        # If no specific type is detected, fallback to using python-magic
-        mime = magic.Magic(mime=True)
-        return mime.from_buffer(data)
+# import magic
+
+# @app.route('/view_jd/<int:job_id>', methods=['GET'])
+# def view_jd(job_id):
+#     # Retrieve the job post data from the database using SQLAlchemy
+    # jobpost = JobPost.query.filter_by(id=job_id).first()
+    # if not jobpost:
+    #     return 'Job post not found', 404  # Return 404 Not Found status
+    
+#     # Check if the job post contains a JD PDF
+#     if jobpost.jd_pdf:
+#         # Decode the base64 string back to its original binary data
+#         jd_binary = base64.b64decode(jobpost.jd_pdf)
+ 
+#         # Create a file-like object (BytesIO) from the decoded binary data
+#         jd_file = io.BytesIO(jd_binary)
+ 
+#         # Detect the mimetype using more complex logic
+#         mimetype = detect_mimetype(jd_binary)
+ 
+#         # Return the file as a response
+#         return send_file(
+#             jd_file,
+#             mimetype=mimetype,
+#             as_attachment=False
+#         )
+#     else:
+#         return 'JD PDF not available', 404  # Return 404 Not Found status if JD PDF is not available
+
+# def detect_mimetype(data):
+#     # Check for PDF magic number
+#     if data.startswith(b"%PDF"):
+#         return 'application/pdf'
+#     # Check for MS Word magic number
+#     elif data.startswith(b"\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1"):
+#         return 'application/msword'
+#     # Add more checks for other file types if needed
+#     else:
+#         # If no specific type is detected, fallback to using python-magic
+#         mime = magic.Magic(mime=True)
+#         return mime.from_buffer(data)
 
 
 from flask import Flask, jsonify, request
@@ -3736,69 +8479,987 @@ def generate_excel():
         'to_date_str': to_date_str
     })
 
-def re_send_notification(recruiter_email, job_id):
-    msg = Message('Job Update Notification', sender='ganesh.s@makonissoft.com', recipients=[recruiter_email])
-    msg.body = f'Hello,\n\nThe job post with ID {job_id} has been updated.\n\nPlease check your dashboard for more details.'
+# def re_send_notification(recruiter_email, job_id):
+#     msg = Message('Job Update Notification', sender='ganesh.s@makonissoft.com', recipients=[recruiter_email])
+#     msg.body = f'Hello,\n\nThe job post with ID {job_id} has been updated.\n\nPlease check your dashboard for more details.'
+#     mail.send(msg)
+
+
+def job_updated_send_notification(recruiter_email, new_recruiter_name, job_data, job_id):
+    html_body = f"""
+    <html>
+    <head>
+        <style>
+            body {{
+                font-family: Arial, sans-serif;
+                color: #333;
+                line-height: 1.6;
+                background-color: #f4f4f4;
+                margin: 0;
+                padding: 0;
+            }}
+            .container {{
+                padding: 20px;
+                margin: 20px auto;
+                max-width: 600px;
+                background-color: #ffffff;
+                border: 1px solid #ddd;
+                border-radius: 8px;
+                box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            }}
+            .header {{
+                background-color: #4CAF50;
+                color: white;
+                padding: 10px;
+                text-align: center;
+                font-size: 20px;
+                border-radius: 8px 8px 0 0;
+            }}
+            table {{
+                border-collapse: collapse;
+                width: 100%;
+                margin-top: 10px;
+            }}
+            th, td {{
+                border: 1px solid #ddd;
+                padding: 8px;
+                text-align: left;
+            }}
+            th {{
+                background-color: #4CAF50;
+                color: white;
+            }}
+            tr:nth-child(even) {{
+                background-color: #f9f9f9;
+            }}
+            p {{
+                margin: 10px 0;
+            }}
+            .footer {{
+                margin-top: 20px;
+                font-size: 12px;
+                color: #777;
+                text-align: center;
+                border-top: 1px solid #ddd;
+                padding-top: 10px;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                Job Update Notification
+            </div>
+            <p>Dear {new_recruiter_name},</p>
+            <p>The job post with ID <b>{job_id}</b> has been updated.</p>
+            <p>Please find the details below:</p>
+            <table>
+                <tr>
+                    <th style="width: 20%;">Job ID</th>
+                    <th style="width: 30%;">Client</th>
+                    <th style="width: 30%;">Role/Profile</th>
+                    <th style="width: 20%;">Location</th>
+                </tr>
+                {job_data}
+            </table>
+            <p>Please check your dashboard for more details.</p>
+            <p>Regards,</p>
+            <p><b>Makonis Talent Track Pro Team</b></p>
+        </div>
+    </body>
+    </html>
+    """
+
+    msg = Message(
+        f'Job Update Notification: Job ID {job_id}',
+        sender='ganesh.s@makonissoft.com',
+        recipients=[recruiter_email]
+    )
+    msg.html = html_body
     mail.send(msg)
-   
+
+
 @app.route('/edit_job_post/<int:job_post_id>', methods=['POST'])
 def edit_job_post(job_post_id):
     try:
-        # Accessing the JSON data from the request
         data = request.json
         user_id = data.get('user_id')
         
         # Retrieve the user
         user = User.query.filter_by(id=user_id).first()
         
-        # Check if the user exists and has the right permissions
         if user and user.user_type == 'management':
             # Retrieve the job post to be edited
             job_post = JobPost.query.get(job_post_id)
             
             if job_post:
-                # Update job post fields
-                job_post.client = data.get('client', job_post.client)
-                job_post.experience_min = data.get('experience_min', job_post.experience_min)
-                job_post.experience_max = data.get('experience_max', job_post.experience_max)
-                job_post.budget_min = data.get('budget_min', job_post.budget_min)
-                job_post.budget_max = data.get('budget_max', job_post.budget_max)
-                job_post.location = data.get('location', job_post.location)
-                job_post.shift_timings = data.get('shift_timings', job_post.shift_timings)
-                job_post.notice_period = data.get('notice_period', job_post.notice_period)
-                job_post.role = data.get('role', job_post.role)
-                job_post.detailed_jd = data.get('detailed_jd', job_post.detailed_jd)
-                job_post.mode = data.get('mode', job_post.mode)
-                job_post.job_status = data.get('job_status', job_post.job_status)
-                job_post.job_type = data.get('Job_Type', job_post.job_type)  # Updated key 'job_type' to 'Job_Type'
-                job_post.skills = data.get('skills', job_post.skills)
-                job_post.jd_pdf = data.get('jd_pdf', job_post.jd_pdf)
-                job_post.recruiter=data.get('recruiter',job_post.recruiter)
+                old_recruiter_usernames = job_post.recruiter.split(', ') if isinstance(job_post.recruiter, str) else []
 
-                # Update data_updated_date and data_updated_time
-                # current_datetime = datetime.now()
-                current_datetime = datetime.now(pytz.timezone('Asia/Kolkata')) 
-                job_post.data_updated_date = current_datetime.date()
-                job_post.data_updated_time = current_datetime.time()
-                
-                # Update job post in the database
-                db.session.commit()
-                
-                # Increment num_notification count by 1 for each notification associated with the job post
-                notifications = Notification.query.filter_by(job_post_id=job_post_id).all()
-                for notification in notifications:
-                    notification.num_notification += 1
-                
-                db.session.commit()
-                
-                # Return success message
-                return jsonify({"message": "Job post updated successfully"}), 200
+                # Check if any field except 'recruiter' is updated
+                fields_updated = set(data.keys()) - {'recruiter'}
+                if fields_updated:
+                    # Update job post fields
+                    job_post.client = data.get('client', job_post.client)
+                    job_post.experience_min = data.get('experience_min', job_post.experience_min)
+                    job_post.experience_max = data.get('experience_max', job_post.experience_max)
+                    job_post.budget_min = data.get('budget_min', job_post.budget_min)
+                    job_post.budget_max = data.get('budget_max', job_post.budget_max)
+                    job_post.location = data.get('location', job_post.location)
+                    job_post.shift_timings = data.get('shift_timings', job_post.shift_timings)
+                    job_post.notice_period = data.get('notice_period', job_post.notice_period)
+                    job_post.role = data.get('role', job_post.role)
+                    job_post.detailed_jd = data.get('detailed_jd', job_post.detailed_jd)
+                    job_post.mode = data.get('mode', job_post.mode)
+                    job_post.job_status = data.get('job_status', job_post.job_status)
+                    job_post.skills = data.get('skills', job_post.skills)
+                    
+                    recruiters = data.get('recruiter', job_post.recruiter)
+                    recruiters = recruiters if isinstance(recruiters, list) else [recruiters]
+                    job_post.recruiter = ', '.join(list(set(recruiters)))
+                    
+                    job_type = data.get('Job_Type')
+                    if job_type == 'Contract':
+                        job_post.contract_in_months = data.get('Job_Type_details')
+                    
+                    # Handle jd_pdf field
+                    jd_pdf = data.get('jd_pdf')
+                    if jd_pdf is not None:
+                        jd_binary = base64.b64decode(jd_pdf)
+                        job_post.jd_pdf = jd_binary
+                        job_post.jd_pdf_present = True
+                    else:
+                        job_post.jd_pdf_present = False
+
+                    # Update job post in the database
+                    db.session.commit()
+                    
+                    # Create notification records for each recruiter
+                    if job_post.recruiter:
+                        recruiters = list(set(job_post.recruiter.split(', ')))
+                        for recruiter in recruiters:
+                            notification = Notification.query.filter_by(job_post_id=job_post_id, recruiter_name=recruiter).first()
+                            if notification:
+                                notification.num_notification += 1
+                            else:
+                                new_notification = Notification(job_post_id=job_post_id, recruiter_name=recruiter)
+                                db.session.add(new_notification)
+                                new_notification.num_notification = 1
+                    
+                    # Update candidate details
+                    candidates = Candidate.query.filter_by(job_id=job_post_id).all()
+                    for candidate in candidates:
+                        candidate.client = job_post.client
+                        candidate.profile = job_post.role
+
+                    db.session.commit()
+                    
+                    # Retrieve the email addresses of the recruiters
+                    recruiter_emails = [recruiter.email for recruiter in User.query.filter(
+                        User.username.in_(recruiters),
+                        User.user_type == 'recruiter',
+                        User.is_active == True,
+                        User.is_verified == True
+                    )]
+                    
+                    job_data = f"<tr><td>{job_post_id}</td><td>{job_post.client}</td><td>{job_post.role}</td><td>{job_post.location}</td></tr>"
+
+                    for email in recruiter_emails:
+                        if email in [r.email for r in User.query.filter(User.username.in_(old_recruiter_usernames))]:
+                            job_updated_send_notification(recruiter_email=email, new_recruiter_name=user.username, job_data=job_data, job_post_id=job_post_id)
+                        else:
+                            post_job_send_notification(recruiter_email=email, new_recruiter_name=user.username, job_data=job_data)
+                    
+                    return jsonify({'status': 'success', "message": "Job post details updated successfully"})
+                else:
+                    if old_recruiter_usernames:
+                        job_data = f"<tr><td>{job_post_id}</td><td>{job_post.client}</td><td>{job_post.role}</td><td>{job_post.location}</td></tr>"
+                        for recruiter_name in old_recruiter_usernames:
+                            recruiter = User.query.filter_by(username=recruiter_name.strip()).first()
+                            if recruiter:
+                                re_send_notification(recruiter.email, recruiter.username, user.username, job_data, job_post_id)
+                    
+                    return jsonify({'status': 'success', "message": "No fields updated other than recruiter"})
             else:
-                return jsonify({"error": "Job post not found"}), 404
+                return jsonify({'status': 'error', "message": "Job post not found"})
         else:
-            return jsonify({"error": "Unauthorized"}), 401
+            return jsonify({'status': 'error', "message": "Unauthorized"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+# @app.route('/edit_job_post/<int:job_post_id>', methods=['POST'])
+# def edit_job_post(job_post_id):
+#     try:
+#         # Accessing the JSON data from the request
+#         data = request.json
+#         user_id = data.get('user_id')
+        
+#         # Retrieve the user
+#         user = User.query.filter_by(id=user_id).first()
+        
+#         # Check if the user exists and has the right permissions
+#         if user and user.user_type == 'management':
+#             # Retrieve the job post to be edited
+#             job_post = JobPost.query.get(job_post_id)
+            
+#             if job_post:
+#                 # Store the old recruiters' usernames
+#                 old_recruiter_usernames = job_post.recruiter.split(',') if job_post.recruiter else []
+
+#                 # Check if any field except 'recruiter' is updated
+#                 fields_updated = set(data.keys()) - {'recruiter'}
+#                 if fields_updated:
+#                     # Update job post fields
+#                     job_post.client = data.get('client', job_post.client)
+#                     job_post.experience_min = data.get('experience_min', job_post.experience_min)
+#                     job_post.experience_max = data.get('experience_max', job_post.experience_max)
+#                     job_post.budget_min = data.get('budget_min', job_post.budget_min)
+#                     job_post.budget_max = data.get('budget_max', job_post.budget_max)
+#                     job_post.location = data.get('location', job_post.location)
+#                     job_post.shift_timings = data.get('shift_timings', job_post.shift_timings)
+#                     job_post.notice_period = data.get('notice_period', job_post.notice_period)
+#                     job_post.role = data.get('role', job_post.role)
+#                     job_post.detailed_jd = data.get('detailed_jd', job_post.detailed_jd)
+#                     job_post.mode = data.get('mode', job_post.mode)
+#                     job_post.job_status = data.get('job_status', job_post.job_status)
+#                     job_post.skills = data.get('skills', job_post.skills)
+#                     recruiters = data.get('recruiter', job_post.recruiter)
+#                     if recruiters:
+#                         # Ensure recruiters are unique
+#                         unique_recruiters = list(set(recruiters))
+#                         job_post.recruiter = ', '.join(unique_recruiters)
+                    
+#                     job_type = data.get('Job_Type')
+#                     if job_type == 'Contract':
+#                         job_post.contract_in_months = data.get('Job_Type_details')
+                    
+#                     # Handle jd_pdf field
+#                     jd_pdf = data.get('jd_pdf')
+#                     if jd_pdf is not None:
+#                         jd_binary = base64.b64decode(jd_pdf)
+#                         job_post.jd_pdf = jd_binary
+#                         job_post.jd_pdf_present = True
+#                     else:
+#                         job_post.jd_pdf_present = False
+
+                    
+
+#                     # Update job post in the database
+#                     db.session.commit()
+                    
+#                     # Create notification records for each recruiter
+#                     if job_post.recruiter:
+#                         recruiters = list(set(job_post.recruiter.split(', ')))
+#                         for recruiter in recruiters:
+#                             notification = Notification.query.filter_by(job_post_id=job_post_id, recruiter_name=recruiter).first()
+#                             if notification:
+#                                 notification.num_notification += 1
+#                             else:
+#                                 new_notification = Notification(job_post_id=job_post_id, recruiter_name=recruiter)
+#                                 db.session.add(new_notification)
+#                                 new_notification.num_notification = 1
+                    
+#                     # Update candidate details
+#                     candidates = Candidate.query.filter_by(job_id=job_post_id).all()
+#                     for candidate in candidates:
+#                         candidate.client = job_post.client
+#                         candidate.profile = job_post.role
+
+#                     db.session.commit()
+                    
+#                     # Retrieve the email addresses of the recruiters
+#                     recruiter_emails = [recruiter.email for recruiter in User.query.filter(
+#                         User.username.in_(recruiters),
+#                         User.user_type == 'recruiter',
+#                         User.is_active == True,
+#                         User.is_verified == True
+#                     )]
+                    
+#                     job_data = f"<tr><td>{job_post_id}</td><td>{job_post.client}</td><td>{job_post.role}</td><td>{job_post.location}</td></tr>"
+
+#                     for email in recruiter_emails:
+#                         if email in [r.email for r in User.query.filter(User.username.in_(old_recruiter_usernames))]:
+#                             job_updated_send_notification(recruiter_email=email, new_recruiter_name=user.username, job_data=job_data, job_id=job_post_id)
+#                         else:
+#                             post_job_send_notification(recruiter_email=email, new_recruiter_name=user.username, job_data=job_data, job_id=job_post_id)
+                    
+#                     return jsonify({'status': 'success', "message": "Job post details updated successfully"})
+#                 else:
+#                     # No fields updated other than recruiter, so only send notifications to old recruiters
+#                     if old_recruiter_usernames:
+#                         job_data = f"<tr><td>{job_post_id}</td><td>{job_post.client}</td><td>{job_post.role}</td><td>{job_post.location}</td></tr>"
+#                         for recruiter_name in old_recruiter_usernames:
+#                             recruiter = User.query.filter_by(username=recruiter_name.strip()).first()
+#                             if recruiter:
+#                                 re_send_notification(recruiter.email, user.username, job_data, job_post_id)
+                    
+#                     return jsonify({'status': 'success', "message": "No fields updated other than recruiter"})
+#             else:
+#                 return jsonify({'status': 'error', "message": "Job post not found"})
+#         else:
+#             return jsonify({'status': 'error', "message": "Unauthorized"})
+#     except Exception as e:
+#         return jsonify({"error": str(e)}), 500
+
+
+
+# @app.route('/edit_job_post/<int:job_post_id>', methods=['POST'])
+# def edit_job_post(job_post_id):
+#     try:
+#         # Accessing the JSON data from the request
+#         data = request.json
+#         user_id = data.get('user_id')
+        
+#         # Retrieve the user
+#         user = User.query.filter_by(id=user_id).first()
+        
+#         # Check if the user exists and has the right permissions
+#         if user and user.user_type == 'management':
+#             # Retrieve the job post to be edited
+#             job_post = JobPost.query.get(job_post_id)
+            
+#             if job_post:
+#                 # Store the old recruiters' usernames
+#                 old_recruiter_usernames = job_post.recruiter.split(',') if job_post.recruiter else []
+
+#                 # Check if any field except 'recruiter' is updated
+#                 fields_updated = set(data.keys()) - {'recruiter'}
+#                 if fields_updated:
+#                     # Update job post fields
+#                     job_post.client = data.get('client', job_post.client)
+#                     job_post.experience_min = data.get('experience_min', job_post.experience_min)
+#                     job_post.experience_max = data.get('experience_max', job_post.experience_max)
+#                     job_post.budget_min = data.get('budget_min', job_post.budget_min)
+#                     job_post.budget_max = data.get('budget_max', job_post.budget_max)
+#                     job_post.location = data.get('location', job_post.location)
+#                     job_post.shift_timings = data.get('shift_timings', job_post.shift_timings)
+#                     job_post.notice_period = data.get('notice_period', job_post.notice_period)
+#                     job_post.role = data.get('role', job_post.role)
+#                     job_post.detailed_jd = data.get('detailed_jd', job_post.detailed_jd)
+#                     job_post.mode = data.get('mode', job_post.mode)
+#                     job_post.job_status = data.get('job_status', job_post.job_status)
+#                     job_post.skills = data.get('skills', job_post.skills)
+            
+#                     job_type = data.get('Job_Type')
+#                     if job_type == 'Contract':
+#                         job_post.contract_in_months = data.get('Job_Type_details')
+                    
+#                     # Handle jd_pdf field
+#                     jd_pdf = data.get('jd_pdf')
+#                     if jd_pdf is not None:
+#                         jd_binary = base64.b64decode(jd_pdf)
+#                         job_post.jd_pdf = jd_binary
+#                         job_post.jd_pdf_present = True
+#                     else:
+#                         job_post.jd_pdf_present = False
+
+#                     # Update job post in the database
+#                     db.session.commit()
+                    
+#                     # Create notification records for each recruiter
+#                     if job_post.recruiter:
+#                         recruiters = list(set(job_post.recruiter.split(', ')))
+#                         for recruiter in recruiters:
+#                             notification = Notification.query.filter_by(job_post_id=job_post_id, recruiter_name=recruiter).first()
+#                             if notification:
+#                                 notification.num_notification += 1
+#                             else:
+#                                 new_notification = Notification(job_post_id=job_post_id, recruiter_name=recruiter)
+#                                 db.session.add(new_notification)
+#                                 new_notification.num_notification = 1
+                    
+#                     # Update candidate details
+#                     candidates = Candidate.query.filter_by(job_id=job_post_id).all()
+#                     for candidate in candidates:
+#                         candidate.client = job_post.client
+#                         candidate.profile = job_post.role
+
+#                     db.session.commit()
+                    
+#                     # Retrieve the email addresses of the recruiters
+#                     recruiter_emails = [recruiter.email for recruiter in User.query.filter(
+#                         User.username.in_(recruiters),
+#                         User.user_type == 'recruiter',
+#                         User.is_active == True,
+#                         User.is_verified == True
+#                     )]
+                    
+#                     job_data = f"<tr><td>{job_post_id}</td><td>{job_post.client}</td><td>{job_post.role}</td><td>{job_post.location}</td></tr>"
+
+#                     for email in recruiter_emails:
+#                         if email in [r.email for r in User.query.filter(User.username.in_(old_recruiter_usernames))]:
+#                             re_send_notification(recruiter_email=email, new_recruiter_name=user.username, job_data=job_data, job_id=job_post_id)
+#                         else:
+#                             post_job_send_notification(recruiter_email=email, new_recruiter_name=user.username, job_data=job_data, job_id=job_post_id)
+                    
+#                     return jsonify({'status': 'success', "message": "Job post details updated successfully"})
+#                 else:
+#                     # No fields updated other than recruiter, so only send notifications to old recruiters
+#                     if old_recruiter_usernames:
+#                         job_data = f"<tr><td>{job_post_id}</td><td>{job_post.client}</td><td>{job_post.role}</td><td>{job_post.location}</td></tr>"
+#                         for recruiter_name in old_recruiter_usernames:
+#                             recruiter = User.query.filter_by(username=recruiter_name.strip()).first()
+#                             if recruiter:
+#                                 re_send_notification(recruiter.email, user.username, job_data, job_post_id)
+                    
+#                     return jsonify({'status': 'success', "message": "No fields updated other than recruiter"})
+#             else:
+#                 return jsonify({'status': 'error', "message": "Job post not found"})
+#         else:
+#             return jsonify({'status': 'error', "message": "Unauthorized"})
+#     except Exception as e:
+#         return jsonify({"error": str(e)}), 500
+
+
+# @app.route('/edit_job_post/<int:job_post_id>', methods=['POST'])
+# def edit_job_post(job_post_id):
+#     try:
+#         # Accessing the JSON data from the request
+#         data = request.json
+#         user_id = data.get('user_id')
+        
+#         # Retrieve the user
+#         user = User.query.filter_by(id=user_id).first()
+        
+#         # Check if the user exists and has the right permissions
+#         if user and user.user_type == 'management':
+#             # Retrieve the job post to be edited
+#             job_post = JobPost.query.get(job_post_id)
+            
+#             if job_post:
+#                 # Update job post fields
+#                 job_post.client = data.get('client', job_post.client)
+#                 job_post.experience_min = data.get('experience_min', job_post.experience_min)
+#                 job_post.experience_max = data.get('experience_max', job_post.experience_max)
+#                 job_post.budget_min = data.get('budget_min', job_post.budget_min)
+#                 job_post.budget_max = data.get('budget_max', job_post.budget_max)
+#                 job_post.location = data.get('location', job_post.location)
+#                 job_post.shift_timings = data.get('shift_timings', job_post.shift_timings)
+#                 job_post.notice_period = data.get('notice_period', job_post.notice_period)
+#                 job_post.role = data.get('role', job_post.role)
+#                 job_post.detailed_jd = data.get('detailed_jd', job_post.detailed_jd)
+#                 job_post.mode = data.get('mode', job_post.mode)
+#                 job_post.job_status = data.get('job_status', job_post.job_status)
+#                 # job_post.job_type = data.get('Job_Type', job_post.job_type)  # Updated key 'job_type' to 'Job_Type'
+#                 job_post.skills = data.get('skills', job_post.skills)
+#                 # job_post.jd_pdf = data.get('jd_pdf', job_post.jd_pdf)
+
+#                 job_type = data.get('Job_Type')
+#                 if job_type == 'Contract':
+#                     job_post.contract_in_months = data.get('Job_Type_details')
+#                     # job_type = job_type + '(' + Job_Type_details + ' Months )'
+#                 else:
+#                     pass
+                
+#                 # Handle jd_pdf field
+#                 jd_pdf = data.get('jd_pdf')
+#                 if jd_pdf is not None:
+#                     # Decode the base64 encoded PDF file
+#                     jd_binary = base64.b64decode(jd_pdf)
+#                     # Update job_post with the decoded binary data
+#                     job_post.jd_pdf = jd_binary
+#                     # Set jd_pdf_present to True since PDF is present
+#                     job_post.jd_pdf_present = True
+#                 else:
+#                     # If jd_pdf is None, set jd_pdf_present to False
+#                     job_post.jd_pdf_present = False
+                    
+#                 recruiters = data.get('recruiter', job_post.recruiter)
+#                 if recruiters:
+#                     # Ensure recruiters are unique
+#                     unique_recruiters = list(set(recruiters))
+#                     job_post.recruiter = ', '.join(unique_recruiters)
+                    
+#                 # Update data_updated_date and data_updated_time
+#                 # current_datetime = datetime.now(pytz.timezone('Asia/Kolkata')) 
+#                 # job_post.data_updated_date = current_datetime.date()
+#                 # job_post.data_updated_time = current_datetime.time()
+                
+#                 # Update job post in the database
+#                 db.session.commit()
+                
+#                 # Iterate over recruiters and create notification records for each
+#                 recruiters = data.get('recruiter', job_post.recruiter)
+#                 if recruiters:
+#                     unique_recruiters = list(set(recruiters))
+#                     for recruiter in unique_recruiters:
+#                         # Check if a notification exists for the job post and recruiter combination
+#                         notification = Notification.query.filter_by(job_post_id=job_post_id, recruiter_name=recruiter).first()
+#                         if notification:
+#                             # If notification exists, increment num_notification by 1
+#                             notification.num_notification += 1
+#                         else:
+#                             # If notification does not exist, create a new record with num_notification set to 1
+#                             new_notification = Notification(job_post_id=job_post_id, recruiter_name=recruiter)
+#                             db.session.add(new_notification)
+#                             new_notification.num_notification = 1
+                
+#                 # Update candidate details if job_post_id is present in the Candidate table
+#                 candidates = Candidate.query.filter_by(job_id=job_post_id).all()
+#                 for candidate in candidates:
+#                     candidate.client = job_post.client
+#                     candidate.profile = job_post.role
+#                     # Add more fields if necessary
+
+#                 db.session.commit()
+                
+#                 # Retrieve the email addresses of the recruiters
+#                 recruiter_emails = [recruiter.email for recruiter in User.query.filter(User.username.in_(unique_recruiters),
+#                                                                                       User.user_type == 'recruiter',
+#                                                                                       User.is_active == True,
+#                                                                                       User.is_verified == True)]
+#                 job_data = f"<tr><td>{job_post_id}</td><td>{job_post.client}</td><td>{job_post.role}</td><td>{job_post.location}</td></tr>"
+                
+#                 for email in recruiter_emails:
+#                     if email in [r.email for r in User.query.filter(User.username.in_(job_post.recruiter.split(',')))]:
+#                         # If recruiter already associated, send a job update notification
+                        
+#                         # re_send_notification(recruiter_email=email, job_id=job_post_id)
+#                         job_updated_send_notification(recruiter_email, new_recruiter_name, job_data, job_post_id)
+#                     else:
+#                         # If new recruiter added, send a new job notification
+                        
+#                         # send_notification(recruiter_email=email)
+#                         post_job_send_notification(recruiter_email, new_recruiter_name, job_data,job_post_id)
+                        
+                
+#                 # Return success message
+#                 return jsonify({'status': 'success', "message": "Job post details updated successfully"})
+#             else:
+#                 return jsonify({'status': 'error',"message": "Job post are not updated successfully"})
+#         else:
+#             return jsonify({'status': 'error', "message": "Unauthorized"})
+#     except Exception as e:
+#         return jsonify({"error": str(e)}), 500
+
+# @app.route('/edit_job_post/<int:job_post_id>', methods=['POST'])
+# def edit_job_post(job_post_id):
+#     try:
+#         # Accessing the JSON data from the request
+#         data = request.json
+#         user_id = data.get('user_id')
+        
+#         # Retrieve the user
+#         user = User.query.filter_by(id=user_id).first()
+        
+#         # Check if the user exists and has the right permissions
+#         if user and user.user_type == 'management':
+#             # Retrieve the job post to be edited
+#             job_post = JobPost.query.get(job_post_id)
+            
+#             if job_post:
+#                 # Update job post fields
+#                 job_post.client = data.get('client', job_post.client)
+#                 job_post.experience_min = data.get('experience_min', job_post.experience_min)
+#                 job_post.experience_max = data.get('experience_max', job_post.experience_max)
+#                 job_post.budget_min = data.get('budget_min', job_post.budget_min)
+#                 job_post.budget_max = data.get('budget_max', job_post.budget_max)
+#                 job_post.location = data.get('location', job_post.location)
+#                 job_post.shift_timings = data.get('shift_timings', job_post.shift_timings)
+#                 job_post.notice_period = data.get('notice_period', job_post.notice_period)
+#                 job_post.role = data.get('role', job_post.role)
+#                 job_post.detailed_jd = data.get('detailed_jd', job_post.detailed_jd)
+#                 job_post.mode = data.get('mode', job_post.mode)
+#                 job_post.job_status = data.get('job_status', job_post.job_status)
+#                 job_post.job_type = data.get('Job_Type', job_post.job_type)  # Updated key 'job_type' to 'Job_Type'
+#                 job_post.skills = data.get('skills', job_post.skills)
+#                 # job_post.jd_pdf = data.get('jd_pdf', job_post.jd_pdf)
+
+#                 job_type = data.get('job_type')
+#                 if job_type == 'Contract':
+#                     job_post.contract_in_months = data.get('Job_Type_details')
+#                     # job_type = job_type + '(' + Job_Type_details + ' Months )'
+#                 # else:
+#                 #     pass
+                
+#                 # Handle jd_pdf field
+#                 jd_pdf = data.get('jd_pdf')
+#                 if jd_pdf is not None:
+#                     # Decode the base64 encoded PDF file
+#                     jd_binary = base64.b64decode(jd_pdf)
+#                     # Update job_post with the decoded binary data
+#                     job_post.jd_pdf = jd_binary
+#                     # Set jd_pdf_present to True since PDF is present
+#                     job_post.jd_pdf_present = True
+#                 else:
+#                     # If jd_pdf is None, set jd_pdf_present to False
+#                     job_post.jd_pdf_present = False
+                    
+#                 recruiters = data.get('recruiter', job_post.recruiter)
+#                 if recruiters:
+#                     # Ensure recruiters are unique
+#                     unique_recruiters = list(set(recruiters))
+#                     job_post.recruiter = ', '.join(unique_recruiters)
+                    
+#                 # Update data_updated_date and data_updated_time
+#                 current_datetime = datetime.now(pytz.timezone('Asia/Kolkata')) 
+#                 job_post.data_updated_date = current_datetime.date()
+#                 job_post.data_updated_time = current_datetime.time()
+                
+#                 # Update job post in the database
+#                 db.session.commit()
+                
+#                 # Iterate over recruiters and create notification records for each
+#                 recruiters = data.get('recruiter', job_post.recruiter)
+#                 if recruiters:
+#                     unique_recruiters = list(set(recruiters))
+#                     for recruiter in unique_recruiters:
+#                         # Check if a notification exists for the job post and recruiter combination
+#                         notification = Notification.query.filter_by(job_post_id=job_post_id, recruiter_name=recruiter).first()
+#                         if notification:
+#                             # If notification exists, increment num_notification by 1
+#                             notification.num_notification += 1
+#                         else:
+#                             # If notification does not exist, create a new record with num_notification set to 1
+#                             new_notification = Notification(job_post_id=job_post_id, recruiter_name=recruiter)
+#                             db.session.add(new_notification)
+#                             new_notification.num_notification = 1
+                
+#                 # Update candidate details if job_post_id is present in the Candidate table
+#                 candidates = Candidate.query.filter_by(job_id=job_post_id).all()
+#                 for candidate in candidates:
+#                     candidate.client = job_post.client
+#                     candidate.profile = job_post.role
+#                     # Add more fields if necessary
+
+#                 db.session.commit()
+                
+#                 # Send notifications
+#                 for recruiter in unique_recruiters:
+#                     if recruiter in job_post.recruiter.split(','):
+#                         # If recruiter already associated, send a job update notification
+#                         re_send_notification(recruiter_email=recruiter, job_id=job_post_id)
+#                     else:
+#                         # If new recruiter added, send a new job notification
+#                         send_notification(recruiter_email=recruiter)
+                
+#                 # Return success message
+#                 return jsonify({'status': 'success', "message": "Job post details updated successfully"})
+#             else:
+#                 return jsonify({'status': 'error',"message": "Job post are not updated successfully"})
+#         else:
+#             return jsonify({'status': 'error', "message": "Unauthorized"})
+#     except Exception as e:
+#         return jsonify({"error": str(e)}), 500
+
+
+# @app.route('/edit_job_post/<int:job_post_id>', methods=['POST'])
+# def edit_job_post(job_post_id):
+#     try:
+#         # Accessing the JSON data from the request
+#         data = request.json
+#         user_id = data.get('user_id')
+        
+#         # Retrieve the user
+#         user = User.query.filter_by(id=user_id).first()
+        
+#         # Check if the user exists and has the right permissions
+#         if user and user.user_type == 'management':
+#             # Retrieve the job post to be edited
+#             job_post = JobPost.query.get(job_post_id)
+            
+#             if job_post:
+#                 # Update job post fields
+#                 job_post.client = data.get('client', job_post.client)
+#                 job_post.experience_min = data.get('experience_min', job_post.experience_min)
+#                 job_post.experience_max = data.get('experience_max', job_post.experience_max)
+#                 job_post.budget_min = data.get('budget_min', job_post.budget_min)
+#                 job_post.budget_max = data.get('budget_max', job_post.budget_max)
+#                 job_post.location = data.get('location', job_post.location)
+#                 job_post.shift_timings = data.get('shift_timings', job_post.shift_timings)
+#                 job_post.notice_period = data.get('notice_period', job_post.notice_period)
+#                 job_post.role = data.get('role', job_post.role)
+#                 job_post.detailed_jd = data.get('detailed_jd', job_post.detailed_jd)
+#                 job_post.mode = data.get('mode', job_post.mode)
+#                 job_post.job_status = data.get('job_status', job_post.job_status)
+#                 job_post.job_type = data.get('Job_Type', job_post.job_type)  # Updated key 'job_type' to 'Job_Type'
+#                 job_post.skills = data.get('skills', job_post.skills)
+#                 # job_post.jd_pdf = data.get('jd_pdf', job_post.jd_pdf)
+
+#                 job_type = data.get('job_type')
+#                 if job_type == 'Contract':
+#                     job_post.contract_in_months = data.get('Job_Type_details')
+#                     # job_type = job_type + '(' + Job_Type_details + ' Months )'
+#                 # else:
+#                 #     pass
+                
+#                 # Handle jd_pdf field
+#                 jd_pdf = data.get('jd_pdf')
+#                 if jd_pdf is not None:
+#                     # Decode the base64 encoded PDF file
+#                     jd_binary = base64.b64decode(jd_pdf)
+#                     # Update job_post with the decoded binary data
+#                     job_post.jd_pdf = jd_binary
+#                     # Set jd_pdf_present to True since PDF is present
+#                     job_post.jd_pdf_present = True
+#                 else:
+#                     # If jd_pdf is None, set jd_pdf_present to False
+#                     job_post.jd_pdf_present = False
+                    
+#                 recruiters = data.get('recruiter', job_post.recruiter)
+#                 if recruiters:
+#                     # Ensure recruiters are unique
+#                     unique_recruiters = list(set(recruiters))
+#                     job_post.recruiter = ', '.join(unique_recruiters)
+                    
+#                 # Update data_updated_date and data_updated_time
+#                 current_datetime = datetime.now(pytz.timezone('Asia/Kolkata')) 
+#                 job_post.data_updated_date = current_datetime.date()
+#                 job_post.data_updated_time = current_datetime.time()
+                
+#                 # Update job post in the database
+#                 db.session.commit()
+                
+#                 # Iterate over recruiters and create notification records for each
+#                 recruiters = data.get('recruiter', job_post.recruiter)
+#                 if recruiters:
+#                     unique_recruiters = list(set(recruiters))
+#                     for recruiter in unique_recruiters:
+#                         # Check if a notification exists for the job post and recruiter combination
+#                         notification = Notification.query.filter_by(job_post_id=job_post_id, recruiter_name=recruiter).first()
+#                         if notification:
+#                             # If notification exists, increment num_notification by 1
+#                             notification.num_notification += 1
+#                         else:
+#                             # If notification does not exist, create a new record with num_notification set to 1
+#                             new_notification = Notification(job_post_id=job_post_id, recruiter_name=recruiter)
+#                             db.session.add(new_notification)
+#                             new_notification.num_notification = 1
+                
+#                 # Update candidate details if job_post_id is present in the Candidate table
+#                 candidates = Candidate.query.filter_by(job_id=job_post_id).all()
+#                 for candidate in candidates:
+#                     candidate.client = job_post.client
+#                     candidate.profile = job_post.role
+#                     # Add more fields if necessary
+
+#                 db.session.commit()
+                
+#                 # Return success message
+#                 return jsonify({'status': 'success', "message": "Job post details updated successfully"})
+#             else:
+#                 return jsonify({'status': 'error',"message": "Job post are not updated successfully"})
+#         else:
+#             return jsonify({'status': 'error', "message": "Unauthorized"})
+#     except Exception as e:
+#         return jsonify({"error": str(e)}), 500
+
+
+# @app.route('/edit_job_post/<int:job_post_id>', methods=['POST'])
+# def edit_job_post(job_post_id):
+#     try:
+#         # Accessing the JSON data from the request
+#         data = request.json
+#         user_id = data.get('user_id')
+        
+#         # Retrieve the user
+#         user = User.query.filter_by(id=user_id).first()
+        
+#         # Check if the user exists and has the right permissions
+#         if user and user.user_type == 'management':
+#             # Retrieve the job post to be edited
+#             job_post = JobPost.query.get(job_post_id)
+            
+#             if job_post:
+#                 # Update job post fields
+#                 job_post.client = data.get('client', job_post.client)
+#                 job_post.experience_min = data.get('experience_min', job_post.experience_min)
+#                 job_post.experience_max = data.get('experience_max', job_post.experience_max)
+#                 job_post.budget_min = data.get('budget_min', job_post.budget_min)
+#                 job_post.budget_max = data.get('budget_max', job_post.budget_max)
+#                 job_post.location = data.get('location', job_post.location)
+#                 job_post.shift_timings = data.get('shift_timings', job_post.shift_timings)
+#                 job_post.notice_period = data.get('notice_period', job_post.notice_period)
+#                 job_post.role = data.get('role', job_post.role)
+#                 job_post.detailed_jd = data.get('detailed_jd', job_post.detailed_jd)
+#                 job_post.mode = data.get('mode', job_post.mode)
+#                 job_post.job_status = data.get('job_status', job_post.job_status)
+#                 job_post.job_type = data.get('Job_Type', job_post.job_type)  # Updated key 'job_type' to 'Job_Type'
+#                 job_post.skills = data.get('skills', job_post.skills)
+#                 # job_post.jd_pdf = data.get('jd_pdf', job_post.jd_pdf)
+                
+#                 # Handle jd_pdf field
+#                 jd_pdf = data.get('jd_pdf')
+#                 if jd_pdf is not None:
+#                     # Decode the base64 encoded PDF file
+#                     jd_binary = base64.b64decode(jd_pdf)
+#                     # Update job_post with the decoded binary data
+#                     job_post.jd_pdf = jd_binary
+#                     # Set jd_pdf_present to True since PDF is present
+#                     job_post.jd_pdf_present = True
+#                 else:
+#                     # If jd_pdf is None, set jd_pdf_present to False
+#                     job_post.jd_pdf_present = False
+                    
+#                 recruiters = data.get('recruiter', job_post.recruiter)
+#                 if recruiters:
+#                     # Ensure recruiters are unique
+#                     unique_recruiters = list(set(recruiters))
+#                     job_post.recruiter = ', '.join(unique_recruiters)
+                    
+#                 # Update data_updated_date and data_updated_time
+#                 current_datetime = datetime.now(pytz.timezone('Asia/Kolkata')) 
+#                 job_post.data_updated_date = current_datetime.date()
+#                 job_post.data_updated_time = current_datetime.time()
+                
+#                 # Update job post in the database
+#                 db.session.commit()
+                
+#                 # Iterate over recruiters and create notification records for each
+#                 recruiters = data.get('recruiter', job_post.recruiter)
+#                 if recruiters:
+#                     unique_recruiters = list(set(recruiters))
+#                     for recruiter in unique_recruiters:
+#                         # Check if a notification exists for the job post and recruiter combination
+#                         notification = Notification.query.filter_by(job_post_id=job_post_id, recruiter_name=recruiter).first()
+#                         if notification:
+#                             # If notification exists, increment num_notification by 1
+#                             notification.num_notification += 1
+#                         else:
+#                             # If notification does not exist, create a new record with num_notification set to 1
+#                             new_notification = Notification(job_post_id=job_post_id, recruiter_name=recruiter)
+#                             db.session.add(new_notification)
+#                             new_notification.num_notification = 1
+                
+#                 db.session.commit()
+                
+#                 # Return success message
+#                 return jsonify({'status': 'success',"message": "Job post updated successfully"})
+#             else:
+#                 return jsonify({'status': 'error',"message": "Job post are not updated successfully"})
+#         else:
+#             return jsonify({'status': 'error',"message": "Unauthorized"})
+#     except Exception as e:
+#         return jsonify({"error": str(e)}), 500
+
+
+
+# @app.route('/edit_job_post/<int:job_post_id>', methods=['POST'])
+# def edit_job_post(job_post_id):
+#     try:
+#         # Accessing the JSON data from the request
+#         data = request.json
+#         user_id = data.get('user_id')
+        
+#         # Retrieve the user
+#         user = User.query.filter_by(id=user_id).first()
+        
+#         # Check if the user exists and has the right permissions
+#         if user and user.user_type == 'management':
+#             # Retrieve the job post to be edited
+#             job_post = JobPost.query.get(job_post_id)
+            
+#             if job_post:
+#                 # Update job post fields
+#                 job_post.client = data.get('client', job_post.client)
+#                 job_post.experience_min = data.get('experience_min', job_post.experience_min)
+#                 job_post.experience_max = data.get('experience_max', job_post.experience_max)
+#                 job_post.budget_min = data.get('budget_min', job_post.budget_min)
+#                 job_post.budget_max = data.get('budget_max', job_post.budget_max)
+#                 job_post.location = data.get('location', job_post.location)
+#                 job_post.shift_timings = data.get('shift_timings', job_post.shift_timings)
+#                 job_post.notice_period = data.get('notice_period', job_post.notice_period)
+#                 job_post.role = data.get('role', job_post.role)
+#                 job_post.detailed_jd = data.get('detailed_jd', job_post.detailed_jd)
+#                 job_post.mode = data.get('mode', job_post.mode)
+#                 job_post.job_status = data.get('job_status', job_post.job_status)
+#                 job_post.job_type = data.get('Job_Type', job_post.job_type)  # Updated key 'job_type' to 'Job_Type'
+#                 job_post.skills = data.get('skills', job_post.skills)
+#                 job_post.jd_pdf = data.get('jd_pdf', job_post.jd_pdf)
+#                 recruiters = data.get('recruiter', job_post.recruiter)
+
+#                 # Update data_updated_date and data_updated_time
+#                 current_datetime = datetime.now(pytz.timezone('Asia/Kolkata')) 
+#                 job_post.data_updated_date = current_datetime.date()
+#                 job_post.data_updated_time = current_datetime.time()
+                
+#                 # Update job post in the database
+#                 db.session.commit()
+                
+#                 # Iterate over recruiters and create notification records for each
+#                 for recruiter in recruiters:
+#                     # Check if a notification exists for the job post and recruiter combination
+#                     notification = Notification.query.filter_by(job_post_id=job_post_id, recruiter_name=recruiter).first()
+#                     if notification:
+#                         # If notification exists, increment num_notification by 1
+#                         notification.num_notification += 1
+#                     else:
+#                         # If notification does not exist, create a new record with num_notification set to 1
+#                         new_notification = Notification(job_post_id=job_post_id, recruiter_name=job_post.recruiter)
+#                         db.session.add(new_notification)
+#                         db.session.commit()
+#                         new_notification.num_notification = 1
+                
+#                 db.session.commit()
+                
+#                 # Return success message
+#                 return jsonify({"message": "Job post updated successfully"}), 200
+#             else:
+#                 return jsonify({"error": "Job post not found"}), 404
+#         else:
+#             return jsonify({"error": "Unauthorized"}), 401
+#     except Exception as e:
+#         return jsonify({"error": str(e)}), 500
+
+
+# @app.route('/edit_job_post/<int:job_post_id>', methods=['POST'])
+# def edit_job_post(job_post_id):
+#     try:
+#         # Accessing the JSON data from the request
+#         data = request.json
+#         user_id = data.get('user_id')
+        
+#         # Retrieve the user
+#         user = User.query.filter_by(id=user_id).first()
+        
+#         # Check if the user exists and has the right permissions
+#         if user and user.user_type == 'management':
+#             # Retrieve the job post to be edited
+#             job_post = JobPost.query.get(job_post_id)
+            
+#             if job_post:
+#                 # Update job post fields
+#                 job_post.client = data.get('client', job_post.client)
+#                 job_post.experience_min = data.get('experience_min', job_post.experience_min)
+#                 job_post.experience_max = data.get('experience_max', job_post.experience_max)
+#                 job_post.budget_min = data.get('budget_min', job_post.budget_min)
+#                 job_post.budget_max = data.get('budget_max', job_post.budget_max)
+#                 job_post.location = data.get('location', job_post.location)
+#                 job_post.shift_timings = data.get('shift_timings', job_post.shift_timings)
+#                 job_post.notice_period = data.get('notice_period', job_post.notice_period)
+#                 job_post.role = data.get('role', job_post.role)
+#                 job_post.detailed_jd = data.get('detailed_jd', job_post.detailed_jd)
+#                 job_post.mode = data.get('mode', job_post.mode)
+#                 job_post.job_status = data.get('job_status', job_post.job_status)
+#                 job_post.job_type = data.get('Job_Type', job_post.job_type)  # Updated key 'job_type' to 'Job_Type'
+#                 job_post.skills = data.get('skills', job_post.skills)
+#                 job_post.jd_pdf = data.get('jd_pdf', job_post.jd_pdf)
+#                 job_post.recruiter=data.get('recruiter',job_post.recruiter)
+
+#                 # Update data_updated_date and data_updated_time
+#                 # current_datetime = datetime.now()
+#                 current_datetime = datetime.now(pytz.timezone('Asia/Kolkata')) 
+#                 job_post.data_updated_date = current_datetime.date()
+#                 job_post.data_updated_time = current_datetime.time()
+                
+#                 # Update job post in the database
+#                 db.session.commit()
+                
+#                 # Increment num_notification count by 1 for each notification associated with the job post
+#                 notifications = Notification.query.filter_by(job_post_id=job_post_id).all()
+#                 for notification in notifications:
+#                     notification.num_notification += 1
+                
+#                 db.session.commit()
+                
+#                 # Return success message
+#                 return jsonify({"message": "Job post updated successfully"}), 200
+#             else:
+#                 return jsonify({"error": "Job post not found"}), 404
+#         else:
+#             return jsonify({"error": "Unauthorized"}), 401
+#     except Exception as e:
+#         return jsonify({"error": str(e)}), 500
 
 
 @app.route('/jobs_notification/<int:user_id>', methods=['GET'])
@@ -3828,6 +9489,7 @@ def get_jobs_notification(user_id):
     else:
         return jsonify({'error': 'User not found or does not have the right permissions'}), 404
 
+
 @app.route('/checked_jobs_notification/<int:user_id>', methods=['POST'])
 def checked_jobs_notification(user_id):
     data = request.json
@@ -3848,6 +9510,12 @@ def checked_jobs_notification(user_id):
                 notification.notification_status = checked_notification_status
                 notification.num_notification = 0
                 db.session.commit()
+                
+            # Delete notifications where num_notification is 0
+            notifications_to_delete = Notification.query.filter_by(recruiter_name=recruiter_name, num_notification=0).all()
+            for notification in notifications_to_delete:
+                db.session.delete(notification)
+                db.session.commit()
         
         # Format the notifications as a list of dictionaries
         notifications_list = [
@@ -3863,6 +9531,43 @@ def checked_jobs_notification(user_id):
         return jsonify(notifications_list), 200
     else:
         return jsonify({'error': 'User not found or does not have the right permissions'}), 404
+
+
+# @app.route('/checked_jobs_notification/<int:user_id>', methods=['POST'])
+# def checked_jobs_notification(user_id):
+#     data = request.json
+#     checked_notification_status = data.get('checked_notification_status')
+
+#     user = User.query.filter_by(id=user_id).first()
+    
+#     # Check if the user exists and has the right permissions
+#     if user and user.user_type == 'recruiter':
+#         recruiter_name = user.username
+        
+#         # Retrieve the notifications for the recruiter
+#         notifications = Notification.query.filter_by(recruiter_name=recruiter_name).all()
+        
+#         if checked_notification_status:
+#             # Update the num_notification to 0 for each notification
+#             for notification in notifications:
+#                 notification.notification_status = checked_notification_status
+#                 notification.num_notification = 0
+#                 db.session.commit()
+        
+#         # Format the notifications as a list of dictionaries
+#         notifications_list = [
+#             {
+#                 'id': notification.id,
+#                 'job_post_id': notification.job_post_id,
+#                 'recruiter_name': notification.recruiter_name,
+#                 'notification_status': notification.notification_status,
+#                 'num_notification': notification.num_notification
+#             } for notification in notifications
+#         ]
+        
+#         return jsonify(notifications_list), 200
+#     else:
+#         return jsonify({'error': 'User not found or does not have the right permissions'}), 404
     
 @app.route('/get_candidate_data')
 def get_candidate_data():
@@ -4503,7 +10208,7 @@ def extract_name(text):
 @app.route('/parse_resume', methods=['POST'])
 def parse_resume():
     if 'resume' not in request.json:
-        return jsonify({"error": "No resume data provided"}), 400
+        return jsonify({'status':'error',"message": "No resume data provided"})
     
     data = request.json
     resume_data = data['resume']
@@ -4511,13 +10216,13 @@ def parse_resume():
     try:
         decoded_resume = base64.b64decode(resume_data)
     except Exception as e:
-        return jsonify({"error": "Invalid resume data"}), 400
+        return jsonify({'status':'error',"message": "Invalid resume data"})
     
     resume_file = io.BytesIO(decoded_resume)
     resume_text = extract_text(resume_file)
     
     if not resume_text:
-        return jsonify({"error": "No text found in the resume data"}), 400
+        return jsonify({'status':'error',"message": "No text found in the resume data"})
 
     it_skills = [ 
         'Data Analysis', 'Machine Learning', 'Communication', 'Project Management',
@@ -4566,6 +10271,8 @@ def parse_resume():
     name_text = extract_name(resume_text)
 
     return jsonify({
+        'status':'success',
+        'message':'resume parsed successfully',
         "name": name_text,
         "mail": email_text,
         "phone": phone_text,
