@@ -8486,6 +8486,101 @@ def generate_excel():
 #     mail.send(msg)
 
 
+def job_removed_send_notification(recruiter_email, new_recruiter_name, job_data, job_id):
+    html_body = f"""
+    <html>
+    <head>
+        <style>
+            body {{
+                font-family: Arial, sans-serif;
+                color: #333;
+                line-height: 1.6;
+                background-color: #f4f4f4;
+                margin: 0;
+                padding: 0;
+            }}
+            .container {{
+                padding: 20px;
+                margin: 20px auto;
+                max-width: 600px;
+                background-color: #ffffff;
+                border: 1px solid #ddd;
+                border-radius: 8px;
+                box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            }}
+            .header {{
+                background-color: #4CAF50;
+                color: white;
+                padding: 10px;
+                text-align: center;
+                font-size: 20px;
+                border-radius: 8px 8px 0 0;
+            }}
+            table {{
+                border-collapse: collapse;
+                width: 100%;
+                margin-top: 10px;
+            }}
+            th, td {{
+                border: 1px solid #ddd;
+                padding: 8px;
+                text-align: left;
+            }}
+            th {{
+                background-color: #4CAF50;
+                color: white;
+            }}
+            tr:nth-child(even) {{
+                background-color: #f9f9f9;
+            }}
+            p {{
+                margin: 10px 0;
+            }}
+            .footer {{
+                margin-top: 20px;
+                font-size: 12px;
+                color: #777;
+                text-align: center;
+                border-top: 1px solid #ddd;
+                padding-top: 10px;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                Job Update Notification
+            </div>
+            <p>Dear {new_recruiter_name},</p>
+            <p>The job post with ID <b>{job_id}</b> has been removed from your login.</p>
+            <p>Please find the details below:</p>
+            <table>
+                <tr>
+                    <th style="width: 20%;">Job ID</th>
+                    <th style="width: 30%;">Client</th>
+                    <th style="width: 30%;">Role/Profile</th>
+                    <th style="width: 20%;">Location</th>
+                </tr>
+                {job_data}
+            </table>
+            <p>Please check your dashboard for more details.</p>
+            <p>Regards,</p>
+            <p><b>Makonis Talent Track Pro Team</b></p>
+        </div>
+    </body>
+    </html>
+    """
+
+    msg = Message(
+        f'Job Removal Notification: Job ID {job_id}',
+        sender='saiganeshkanuparthi@gmail.com',
+        recipients=[recruiter_email]
+    )
+    msg.html = html_body
+    mail.send(msg)
+
+
+
 def job_updated_send_notification(recruiter_email, new_recruiter_name, job_data, job_id):
     html_body = f"""
     <html>
@@ -8663,12 +8758,48 @@ def edit_job_post(job_post_id):
                     )]
                     
                     job_data = f"<tr><td>{job_post_id}</td><td>{job_post.client}</td><td>{job_post.role}</td><td>{job_post.location}</td></tr>"
+                    
+                    old_recruiters = User.query.filter(User.username.in_(old_recruiter_usernames)).all()
 
-                    for email in recruiter_emails:
-                        if email in [r.email for r in User.query.filter(User.username.in_(old_recruiter_usernames))]:
-                            job_updated_send_notification(recruiter_email=email, new_recruiter_name=user.username, job_data=job_data, job_id=job_post_id)
-                        else:
-                            post_job_send_notification(recruiter_email=email, new_recruiter_name=user.username, job_data=job_data)
+                    new_recruiters = User.query.filter(User.username.in_(data.get('recruiter', job_post.recruiter))).all()
+                    new_recruiter_usernames = [recruiter.username for recruiter in new_recruiters]
+
+                    
+
+                    unchanged_recruiters = old_recruiter_usernames & new_recruiter_usernames
+                    removed_recruiters = old_recruiter_usernames - new_recruiter_usernames
+                    added_recruiters = new_recruiter_usernames - old_recruiter_usernames
+
+                    all_recruiters = User.query.filter(
+                        User.username.in_(new_recruiter_usernames.union(old_recruiter_usernames)),
+                        User.user_type == 'recruiter',
+                        User.is_active == True,
+                        User.is_verified == True
+                    ).all()
+
+                    all_recruiter_emails = {recruiter.username: recruiter.email for recruiter in all_recruiters}
+
+                    for recruiter_name in unchanged_recruiters:
+                        email = all_recruiter_emails.get(recruiter_name)
+                        if email:
+                            job_updated_send_notification(recruiter_email=email, new_recruiter_name=recruiter_name, job_data=job_data, job_id=job_post_id)
+
+                    for recruiter_name in removed_recruiters:
+                        email = all_recruiter_emails.get(recruiter_name)
+                        if email:
+                            job_removed_send_notification(recruiter_email=email, new_recruiter_name=recruiter_name, job_data=job_data, job_id=job_post_id)
+
+                    for recruiter_name in added_recruiters:
+                        email = all_recruiter_emails.get(recruiter_name)
+                        if email:
+                            post_job_send_notification(recruiter_email=email, new_recruiter_name=recruiter_name, job_data=job_data)
+
+                    
+                    # for email in recruiter_emails:
+                    #     if email in [r.email for r in )]:
+                    #         job_updated_send_notification(recruiter_email=email, new_recruiter_name=user.username, job_data=job_data, job_id=job_post_id)
+                    #     else:
+                    #         post_job_send_notification(recruiter_email=email, new_recruiter_name=user.username, job_data=job_data)
                     
                     return jsonify({'status': 'success', "message": "Job post details updated successfully"})
                 else:
@@ -8677,7 +8808,7 @@ def edit_job_post(job_post_id):
                         for recruiter_name in old_recruiter_usernames:
                             recruiter = User.query.filter_by(username=recruiter_name.strip()).first()
                             if recruiter:
-                                re_send_notification(recruiter.email, recruiter.username, user.username, job_data, job_post_id)
+                                job_updated_send_notification(recruiter.email, recruiter.username, user.username, job_data, job_post_id)
                     
                     return jsonify({'status': 'success', "message": "No fields updated other than recruiter"})
             else:
@@ -8686,6 +8817,114 @@ def edit_job_post(job_post_id):
             return jsonify({'status': 'error', "message": "Unauthorized"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+# @app.route('/edit_job_post/<int:job_post_id>', methods=['POST'])
+# def edit_job_post(job_post_id):
+#     try:
+#         data = request.json
+#         user_id = data.get('user_id')
+        
+#         # Retrieve the user
+#         user = User.query.filter_by(id=user_id).first()
+        
+#         if user and user.user_type == 'management':
+#             # Retrieve the job post to be edited
+#             job_post = JobPost.query.get(job_post_id)
+            
+#             if job_post:
+#                 old_recruiter_usernames = job_post.recruiter.split(', ') if isinstance(job_post.recruiter, str) else []
+
+#                 # Check if any field except 'recruiter' is updated
+#                 fields_updated = set(data.keys()) - {'recruiter'}
+#                 if fields_updated:
+#                     # Update job post fields
+#                     job_post.client = data.get('client', job_post.client)
+#                     job_post.experience_min = data.get('experience_min', job_post.experience_min)
+#                     job_post.experience_max = data.get('experience_max', job_post.experience_max)
+#                     job_post.budget_min = data.get('budget_min', job_post.budget_min)
+#                     job_post.budget_max = data.get('budget_max', job_post.budget_max)
+#                     job_post.location = data.get('location', job_post.location)
+#                     job_post.shift_timings = data.get('shift_timings', job_post.shift_timings)
+#                     job_post.notice_period = data.get('notice_period', job_post.notice_period)
+#                     job_post.role = data.get('role', job_post.role)
+#                     job_post.detailed_jd = data.get('detailed_jd', job_post.detailed_jd)
+#                     job_post.mode = data.get('mode', job_post.mode)
+#                     job_post.job_status = data.get('job_status', job_post.job_status)
+#                     job_post.skills = data.get('skills', job_post.skills)
+                    
+#                     recruiters = data.get('recruiter', job_post.recruiter)
+#                     recruiters = recruiters if isinstance(recruiters, list) else [recruiters]
+#                     job_post.recruiter = ', '.join(list(set(recruiters)))
+                    
+#                     job_type = data.get('Job_Type')
+#                     if job_type == 'Contract':
+#                         job_post.contract_in_months = data.get('Job_Type_details')
+                    
+#                     # Handle jd_pdf field
+#                     jd_pdf = data.get('jd_pdf')
+#                     if jd_pdf is not None:
+#                         jd_binary = base64.b64decode(jd_pdf)
+#                         job_post.jd_pdf = jd_binary
+#                         job_post.jd_pdf_present = True
+#                     else:
+#                         job_post.jd_pdf_present = False
+
+#                     # Update job post in the database
+#                     db.session.commit()
+                    
+#                     # Create notification records for each recruiter
+#                     if job_post.recruiter:
+#                         recruiters = list(set(job_post.recruiter.split(', ')))
+#                         for recruiter in recruiters:
+#                             notification = Notification.query.filter_by(job_post_id=job_post_id, recruiter_name=recruiter).first()
+#                             if notification:
+#                                 notification.num_notification += 1
+#                             else:
+#                                 new_notification = Notification(job_post_id=job_post_id, recruiter_name=recruiter)
+#                                 db.session.add(new_notification)
+#                                 new_notification.num_notification = 1
+                    
+#                     # Update candidate details
+#                     candidates = Candidate.query.filter_by(job_id=job_post_id).all()
+#                     for candidate in candidates:
+#                         candidate.client = job_post.client
+#                         candidate.profile = job_post.role
+
+#                     db.session.commit()
+                    
+#                     # Retrieve the email addresses of the recruiters
+#                     recruiter_emails = [recruiter.email for recruiter in User.query.filter(
+#                         User.username.in_(recruiters),
+#                         User.user_type == 'recruiter',
+#                         User.is_active == True,
+#                         User.is_verified == True
+#                     )]
+                    
+#                     job_data = f"<tr><td>{job_post_id}</td><td>{job_post.client}</td><td>{job_post.role}</td><td>{job_post.location}</td></tr>"
+
+#                     for email in recruiter_emails:
+#                         if email in [r.email for r in User.query.filter(User.username.in_(old_recruiter_usernames))]:
+#                             job_updated_send_notification(recruiter_email=email, new_recruiter_name=user.username, job_data=job_data, job_id=job_post_id)
+#                         else:
+#                             post_job_send_notification(recruiter_email=email, new_recruiter_name=user.username, job_data=job_data)
+                    
+#                     return jsonify({'status': 'success', "message": "Job post details updated successfully"})
+#                 else:
+#                     if old_recruiter_usernames:
+#                         job_data = f"<tr><td>{job_post_id}</td><td>{job_post.client}</td><td>{job_post.role}</td><td>{job_post.location}</td></tr>"
+#                         for recruiter_name in old_recruiter_usernames:
+#                             recruiter = User.query.filter_by(username=recruiter_name.strip()).first()
+#                             if recruiter:
+#                                 re_send_notification(recruiter.email, recruiter.username, user.username, job_data, job_post_id)
+                    
+#                     return jsonify({'status': 'success', "message": "No fields updated other than recruiter"})
+#             else:
+#                 return jsonify({'status': 'error', "message": "Job post not found"})
+#         else:
+#             return jsonify({'status': 'error', "message": "Unauthorized"})
+#     except Exception as e:
+#         return jsonify({"error": str(e)}), 500
 
 # @app.route('/edit_job_post/<int:job_post_id>', methods=['POST'])
 # def edit_job_post(job_post_id):
