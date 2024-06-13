@@ -903,7 +903,8 @@ def get_recruiters_candidate():
 
 from flask_mail import Message
 
-def assign_candidates_notification(recruiter_email, new_recruiter_name, candidates_data, mail):
+
+def assign_candidates_notification(recruiter_email, new_recruiter_name, candidates_data):
     html_body = f"""
     <html>
     <head>
@@ -970,7 +971,7 @@ def assign_candidates_notification(recruiter_email, new_recruiter_name, candidat
             </div>
             <p>Hi {new_recruiter_name},</p>
             <p>Candidate data has been transferred to your ATS account.</p>
-            <p> Please find the details below:</p>
+            <p>Please find the details below:</p>
             <table>
                 <tr>
                     <th>Job ID</th>
