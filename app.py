@@ -8689,7 +8689,7 @@ def edit_job_post(job_post_id):
             job_post = JobPost.query.get(job_post_id)
             
             if job_post:
-                old_recruiter_usernames = job_post.recruiter.split(', ') if isinstance(job_post.recruiter, str) else []
+                old_recruiter_usernames = set(job_post.recruiter.split(', ')) if isinstance(job_post.recruiter, str) else set()
 
                 # Check if any field except 'recruiter' is updated
                 fields_updated = set(data.keys()) - {'recruiter'}
@@ -8710,8 +8710,8 @@ def edit_job_post(job_post_id):
                     job_post.skills = data.get('skills', job_post.skills)
                     
                     recruiters = data.get('recruiter', job_post.recruiter)
-                    recruiters = recruiters if isinstance(recruiters, list) else [recruiters]
-                    job_post.recruiter = ', '.join(list(set(recruiters)))
+                    recruiters = set(recruiters if isinstance(recruiters, list) else [recruiters])
+                    job_post.recruiter = ', '.join(list(recruiters))
                     
                     job_type = data.get('Job_Type')
                     if job_type == 'Contract':
@@ -8731,7 +8731,6 @@ def edit_job_post(job_post_id):
                     
                     # Create notification records for each recruiter
                     if job_post.recruiter:
-                        recruiters = list(set(job_post.recruiter.split(', ')))
                         for recruiter in recruiters:
                             notification = Notification.query.filter_by(job_post_id=job_post_id, recruiter_name=recruiter).first()
                             if notification:
@@ -8761,10 +8760,8 @@ def edit_job_post(job_post_id):
                     
                     old_recruiters = User.query.filter(User.username.in_(old_recruiter_usernames)).all()
 
-                    new_recruiters = User.query.filter(User.username.in_(data.get('recruiter', job_post.recruiter))).all()
-                    new_recruiter_usernames = [recruiter.username for recruiter in new_recruiters]
-
-                    
+                    new_recruiters = User.query.filter(User.username.in_(recruiters)).all()
+                    new_recruiter_usernames = {recruiter.username for recruiter in new_recruiters}
 
                     unchanged_recruiters = old_recruiter_usernames & new_recruiter_usernames
                     removed_recruiters = old_recruiter_usernames - new_recruiter_usernames
@@ -8793,13 +8790,6 @@ def edit_job_post(job_post_id):
                         email = all_recruiter_emails.get(recruiter_name)
                         if email:
                             post_job_send_notification(recruiter_email=email, new_recruiter_name=recruiter_name, job_data=job_data)
-
-                    
-                    # for email in recruiter_emails:
-                    #     if email in [r.email for r in )]:
-                    #         job_updated_send_notification(recruiter_email=email, new_recruiter_name=user.username, job_data=job_data, job_id=job_post_id)
-                    #     else:
-                    #         post_job_send_notification(recruiter_email=email, new_recruiter_name=user.username, job_data=job_data)
                     
                     return jsonify({'status': 'success', "message": "Job post details updated successfully"})
                 else:
@@ -8817,6 +8807,7 @@ def edit_job_post(job_post_id):
             return jsonify({'status': 'error', "message": "Unauthorized"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
 
 
 # @app.route('/edit_job_post/<int:job_post_id>', methods=['POST'])
