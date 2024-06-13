@@ -901,7 +901,9 @@ def get_recruiters_candidate():
         return jsonify({'status': 'error', 'message': 'User not found or not authorized'}), 404
 
 
-def assign_candidates_notification(recruiter_email, new_recruiter_name, candidates_data):
+from flask_mail import Message
+
+def assign_candidates_notification(recruiter_email, new_recruiter_name, candidates_data, mail):
     html_body = f"""
     <html>
     <head>
@@ -987,14 +989,14 @@ def assign_candidates_notification(recruiter_email, new_recruiter_name, candidat
     </html>
     """
 
-        msg = Message(
-        # 'Candidate Assignment Notification',
-        f'Candidate Data Transferred',
+    msg = Message(
+        'Candidate Assignment Notification',
         sender='saiganeshkanuparthi@gmail.com',
         recipients=[recruiter_email]
     )
     msg.html = html_body
     mail.send(msg)
+
 
 # def assign_candidates_notification(recruiter_email, new_recruiter_name, candidates_data):
 #     html_body = f"""
