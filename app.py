@@ -889,6 +889,7 @@ def get_recruiters_candidate():
                 'id': candidate.id,
                 'username': candidate.name,
                 'status': candidate.status,
+                'client':candidate.client,
                 'profile': candidate.profile,
                 'recruiter': candidate.recruiter,
                 'management': candidate.management
@@ -8665,7 +8666,7 @@ def edit_job_post(job_post_id):
 
                     for email in recruiter_emails:
                         if email in [r.email for r in User.query.filter(User.username.in_(old_recruiter_usernames))]:
-                            job_updated_send_notification(recruiter_email=email, new_recruiter_name=user.username, job_data=job_data, job_post_id=job_post_id)
+                            job_updated_send_notification(recruiter_email=email, new_recruiter_name=user.username, job_data=job_data, job_id=job_post_id)
                         else:
                             post_job_send_notification(recruiter_email=email, new_recruiter_name=user.username, job_data=job_data)
                     
@@ -8685,7 +8686,6 @@ def edit_job_post(job_post_id):
             return jsonify({'status': 'error', "message": "Unauthorized"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
 
 # @app.route('/edit_job_post/<int:job_post_id>', methods=['POST'])
 # def edit_job_post(job_post_id):
