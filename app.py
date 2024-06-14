@@ -8119,50 +8119,95 @@ from flask_mail import Message
 @app.route('/change_password', methods=['POST'])
 def change_password():
     data = request.json
+
+    if not data:
+        return jsonify({'status': 'error', 'message': 'No JSON data provided.'})
+
+    user_id = data.get('user_id')
+    username = data.get('username')
+    old_password = data.get('old_password')
+    new_password = data.get('new_password')
+    confirm_password = data.get('confirm_password')
+
+    user = User.query.filter_by(id=user_id).first()
+
+    if not user:
+        return jsonify({'status': 'error', 'message': 'User not found.'})
+
+    if username != user.username:
+        return jsonify({'status': 'error', 'message': 'Logged in user does not match the provided username.'})
+
+    hashed_old_password = hashlib.sha256(old_password.encode()).hexdigest()
+
+    if user.password != hashed_old_password:
+        return jsonify({'status': 'error', 'message': 'Invalid old password.'})
+
+    if old_password == new_password:
+        return jsonify({'status': 'error', 'message': 'New password cannot be the same as the old password.'})
+
+    if new_password != confirm_password:
+        return jsonify({'status': 'error', 'message': 'New password and confirm password is not matching.'})
+
+    hashed_new_password = hashlib.sha256(new_password.encode()).hexdigest()
+    user.password = hashed_new_password
+    db.session.commit()
+
+    msg = Message('Password Changed', sender='saiganeshkanuparthi@gmail.com', recipients=[user.email])
+    msg.body = f'Hello {user.username},\n\nYour password has been successfully changed. Here are your updated credentials:\n\nUsername: {user.username}\nPassword: {new_password}'
+    mail.send(msg)
+
+    if user.user_type == 'management':
+        return jsonify({'status': 'success', 'message': 'Password changed successfully for management user.'})
+    elif user.user_type == 'recruiter':
+        return jsonify({'status': 'success', 'message': 'Password changed successfully for recruiter user.'})
+
+# @app.route('/change_password', methods=['POST'])
+# def change_password():
+#     data = request.json
     
-    if data:
-        user_id = data.get('user_id')
-        user = User.query.filter_by(id=user_id).first()
+#     if data:
+#         user_id = data.get('user_id')
+#         user = User.query.filter_by(id=user_id).first()
 
-        if user:
-            user_name = user.username
-            user_type = user.user_type
+#         if user:
+#             user_name = user.username
+#             user_type = user.user_type
 
-            username = data.get('username')
-            old_password = data.get('old_password')
-            new_password = data.get('new_password')
-            confirm_password = data.get('confirm_password')
+#             username = data.get('username')
+#             old_password = data.get('old_password')
+#             new_password = data.get('new_password')
+#             confirm_password = data.get('confirm_password')
 
-            if username == user_name:
-                # Check if the provided old password matches the one stored in the database
-                hashed_old_password = hashlib.sha256(old_password.encode()).hexdigest()
-                if user.password == hashed_old_password:
-                    if new_password == confirm_password:
-                        # Hash the new password before storing it in the database
-                        hashed_new_password = hashlib.sha256(new_password.encode()).hexdigest()
-                        user.password = hashed_new_password
-                        db.session.commit()
+#             if username == user_name:
+#                 # Check if the provided old password matches the one stored in the database
+#                 hashed_old_password = hashlib.sha256(old_password.encode()).hexdigest()
+#                 if user.password == hashed_old_password:
+#                     if new_password == confirm_password:
+#                         # Hash the new password before storing it in the database
+#                         hashed_new_password = hashlib.sha256(new_password.encode()).hexdigest()
+#                         user.password = hashed_new_password
+#                         db.session.commit()
 
-                        # Send the password change notification email
-                        msg = Message('Password Changed', sender='saiganeshkanuparthi@gmail.com', recipients=[user.email])
-                        msg.body = f'Hello {user.name},\n\nYour password has been successfully changed. Here are your updated credentials:\n\nUsername: {user.username}\nPassword: {new_password}'
-                        mail.send(msg)
+#                         # Send the password change notification email
+#                         msg = Message('Password Changed', sender='saiganeshkanuparthi@gmail.com', recipients=[user.email])
+#                         msg.body = f'Hello {user.name},\n\nYour password has been successfully changed. Here are your updated credentials:\n\nUsername: {user.username}\nPassword: {new_password}'
+#                         mail.send(msg)
 
-                        if user_type == 'management':
-                            return jsonify({'status': 'success',"message": "Password changed successfully for management user."})
-                        else:
-                            return jsonify({'status': 'success',"message": "Password changed successfully for recruiter user."})
-                    else:
-                        return jsonify({'status': 'error',"message": "New password and confirm password do not match."}) 
-                else:
-                    return jsonify({'status': 'error',"message": "Invalid old password."})
-            else:
-                # return jsonify({'status': 'error',"message": "Logged in user does not match the provided username."})
-                 return jsonify({'status': 'error',"message": "User not found."})
-        else:
-            return jsonify({'status': 'error',"message": "User not found."})
-    else:
-        return jsonify({'status': 'error',"message": "No JSON data provided."})
+#                         if user_type == 'management':
+#                             return jsonify({'status': 'success',"message": "Password changed successfully for management user."})
+#                         else:
+#                             return jsonify({'status': 'success',"message": "Password changed successfully for recruiter user."})
+#                     else:
+#                         return jsonify({'status': 'error',"message": "New password and confirm password do not match."}) 
+#                 else:
+#                     return jsonify({'status': 'error',"message": "Invalid old password."})
+#             else:
+#                 # return jsonify({'status': 'error',"message": "Logged in user does not match the provided username."})
+#                  return jsonify({'status': 'error',"message": "User not found."})
+#         else:
+#             return jsonify({'status': 'error',"message": "User not found."})
+#     else:
+#         return jsonify({'status': 'error',"message": "No JSON data provided."})
 
     # return jsonify({"error": "Unauthorized: You must log in to access this page"})
 
@@ -8647,7 +8692,7 @@ def job_removed_send_notification(recruiter_email, new_recruiter_name, job_data,
     <body>
         <div class="container">
             <div class="header">
-                Job Update Notification
+                Job Removal Notification
             </div>
             <p>Dear {new_recruiter_name},</p>
             <p>The job post with ID <b>{job_id}</b> has been removed from your login.</p>
