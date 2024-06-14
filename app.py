@@ -590,294 +590,6 @@ def generate_random_password(length=8):
     password = ''.join(random.choice(digits) for _ in range(length - 3))
     return "Mak" + password
 
-@app.route('/signup', methods=['POST'])
-def signup():
-    data = request.json
-    user_id = data.get('user_id')  # Using get method to avoid KeyError
-    user = User.query.filter_by(id=user_id).first()
-
-    if not user:
-        return jsonify({'status': 'error', 'message': 'Invalid user ID or user does not exist.'})
-
-    user_type = user.user_type
-    user_name = user.username
-
-    if user_type == 'management':
-        username = data.get('username')
-        name = data.get('name')
-        email = data.get('email')
-        user_type = data.get('user_type')
-
-        # Check if required fields are provided
-        if not all([username, name, email, user_type]):
-            return jsonify({'status': 'error', 'message': 'All fields are required'})
-
-        # Generate a random password
-        password = generate_random_password()
-        hashed_password = hashlib.sha256(password.encode()).hexdigest()
-
-        created_by = user_name
-
-        existing_user = User.query.filter(or_(User.username == username, User.email == email, User.name == name)).first()
-
-        if existing_user:
-            return jsonify({'status': 'error', 'message': 'Account with the same Username, Email, or Name already exists.'})
-
-        new_user = User(username=username, password=hashed_password, name=name, email=email, user_type=user_type, created_by=created_by)
-        
-        db.session.add(new_user)
-        db.session.commit()
-
-        # Generate a verification token
-        verification_token = generate_verification_token(new_user.id)
-
-        # Create the verification link
-        verification_link = url_for('verify', token=verification_token, _external=True)
-
-        # Send the verification email
-        msg = Message('Account Verification', sender='saiganeshkanuparthi@gmail.com', recipients=[new_user.email])
-        
-        msg.html = f'''
-        <html>
-        <head>
-            <style>
-                body {{
-                    font-family: 'Arial', sans-serif;
-                    background-color: #f7f7f7;
-                    margin: 0;
-                    padding: 0;
-                }}
-                .container {{
-                    max-width: 600px;
-                    margin: 20px auto;
-                    background-color: #ffffff;
-                    padding: 20px;
-                    border: 1px solid #e0e0e0;
-                    border-radius: 10px;
-                }}
-                h2 {{
-                    color: #333333;
-                    font-size: 24px;
-                    margin-bottom: 20px;
-                }}
-                p {{
-                    color: #666666;
-                    line-height: 1.6;
-                    margin: 10px 0;
-                }}
-                .credentials {{
-                    background-color: #f9f9f9;
-                    padding: 10px;
-                    border-radius: 5px;
-                    border: 1px solid #dddddd;
-                }}
-                .credentials li {{
-                    margin: 5px 0;
-                    padding: 5px;
-                }}
-                a {{
-                    color: #1a73e8;
-                    text-decoration: none;
-                }}
-                a:hover {{
-                    text-decoration: underline;
-                }}
-                .button {{
-                    display: inline-block;
-                    padding: 10px 20px;
-                    margin: 20px 0;
-                    font-size: 16px;
-                    color: #ffffff;
-                    background-color: #333333;
-                    border-radius: 5px;
-                    text-align: center;
-                    text-decoration: none;
-                }}
-                .footer {{
-                    margin-top: 20px;
-                    font-size: 0.9em;
-                    color: #999999;
-                }}
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <h2>Account Verification</h2>
-                <p>Hello {new_user.name},</p>
-                <p>We are pleased to inform you that your account has been successfully created for the <strong>ATS Makonis Talent Track Pro</strong>. Here are your login credentials:</p>
-                <div class="credentials">
-                    <ul>
-                        <li><strong>Username:</strong> {new_user.username}</li>
-                        <li><strong>Password:</strong> {password}</li>
-                    </ul>
-                </div>
-                <p>Please note that the verification link will expire in 24 hours.</p>
-                <p>After verifying your account, you can access the application using the following link:</p>
-                <p><a href="https://ats-makonis.netlify.app/" class="button">Go to ATS Makonis Talent Track Pro</a></p>
-                <p>To verify your account, please click the button below:</p>
-                <p><a href="{verification_link}" class="button">Verify Your Account</a></p>
-                <p>If you have any questions or need assistance, please feel free to reach out to our support team.</p>
-                <p>Best regards,</p>
-                <p><strong>ATS Makonis Talent Track Pro Team</strong></p>
-                <div class="footer">
-                    <p>This is an automated message, please do not reply.</p>
-                </div>
-            </div>
-        </body>
-        </html>
-        '''
-        mail.send(msg)
-
-        return jsonify({'status': 'success',
-            'message': 'A verification email has been sent to your email address. Please check your inbox.',
-            'success_message': 'Account created successfully'
-        })
-    else:
-        return jsonify({'message': 'You do not have permission to create recruiter accounts.'})
-
-
-# @app.route('/signup', methods=['POST'])
-# def signup():
-#     data = request.json
-#     user_id = data.get('user_id')  # Using get method to avoid KeyError
-#     user = User.query.filter_by(id=user_id).first()
-
-#     if not user:
-#         return jsonify({'status': 'error', 'message': 'Invalid user ID or user does not exist.'})
-
-#     user_type = user.user_type
-#     user_name = user.username
-
-#     if user_type == 'management':
-#         username = data.get('username')
-#         name = data.get('name')
-#         email = data.get('email')
-#         user_type = data.get('user_type')
-
-#         # Check if required fields are provided
-#         if not all([username, name, email, user_type]):
-#             return jsonify({'status': 'error', 'message': 'All fields are required'})
-
-#         # Generate a random password
-#         password = generate_random_password()
-#         hashed_password = hashlib.sha256(password.encode()).hexdigest()
-
-#         created_by = user_name
-
-#         existing_user = User.query.filter(or_(User.username == username, User.email == email, User.name == name)).first()
-
-#         if existing_user:
-#             return jsonify({'status': 'error', 'message': 'Account with the same Username, Email, or Name already exists.'})
-
-#         new_user = User(username=username, password=hashed_password, name=name, email=email, user_type=user_type, created_by=created_by)
-        
-#         db.session.add(new_user)
-#         db.session.commit()
-
-#         # Generate a verification token
-#         verification_token = generate_verification_token(new_user.id)
-
-#         # Create the verification link
-#         verification_link = url_for('verify', token=verification_token, _external=True)
-
-#         # Send the verification email
-#         msg = Message('Account Verification', sender='saiganeshkanuparthi@gmail.com', recipients=[new_user.email])
-        
-#         msg.html = f'''
-#         <html>
-#         <head>
-#             <style>
-#                 body {{
-#                     font-family: 'Arial', sans-serif;
-#                     background-color: #f4f4f9;
-#                     margin: 0;
-#                     padding: 0;
-#                     color: #333;
-#                 }}
-#                 .container {{
-#                     max-width: 600px;
-#                     margin: 20px auto;
-#                     background-color: #fff;
-#                     padding: 20px;
-#                     border-radius: 10px;
-#                     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-#                 }}
-#                 h2 {{
-#                     color: #4CAF50;
-#                 }}
-#                 p {{
-#                     line-height: 1.5;
-#                     margin: 10px 0;
-#                 }}
-#                 .credentials {{
-#                     background-color: #f9f9f9;
-#                     padding: 10px;
-#                     border-radius: 5px;
-#                     border: 1px solid #ddd;
-#                 }}
-#                 .credentials li {{
-#                     margin: 5px 0;
-#                     padding: 5px;
-#                 }}
-#                 a {{
-#                     color: #1a73e8;
-#                     text-decoration: none;
-#                 }}
-#                 a:hover {{
-#                     text-decoration: underline;
-#                 }}
-#                 .button {{
-#                     display: inline-block;
-#                     padding: 10px 20px;
-#                     margin: 20px 0;
-#                     font-size: 16px;
-#                     color: #fff;
-#                     background-color: #4CAF50;
-#                     border-radius: 5px;
-#                     text-align: center;
-#                     text-decoration: none;
-#                 }}
-#                 .footer {{
-#                     margin-top: 20px;
-#                     font-size: 0.9em;
-#                     color: #888;
-#                 }}
-#             </style>
-#         </head>
-#         <body>
-#             <div class="container">
-#                 <h2>Welcome, {new_user.name}!</h2>
-#                 <p>We are thrilled to inform you that your account has been successfully created for the <strong>ATS Makonis Talent Track Pro</strong>. Here are your login details:</p>
-#                 <div class="credentials">
-#                     <ul>
-#                         <li><strong>Username:</strong> {new_user.username}</li>
-#                         <li><strong>Password:</strong> {password}</li>
-#                     </ul>
-#                 </div>
-#                 <p>Please note that the verification link will expire in 24 hours.</p>
-#                 <p>After verifying your account, you can access the application using the following link:</p>
-#                 <p><a href="https://ats-makonis.netlify.app/" class="button">Go to ATS Makonis Talent Track Pro</a></p>
-#                 <p>To verify your account, please click the button below:</p>
-#                 <p><a href="{verification_link}" class="button">Verify Your Account</a></p>
-#                 <p>If you have any questions or need assistance, please feel free to reach out to our support team.</p>
-#                 <p>Best regards,</p>
-#                 <p><strong>ATS Makonis Talent Track Pro Team</strong></p>
-#                 <div class="footer">
-#                     <p>This is an automated message, please do not reply.</p>
-#                 </div>
-#             </div>
-#         </body>
-#         </html>
-#         '''
-#         mail.send(msg)
-
-#         return jsonify({'status': 'success',
-#             'message': 'A verification email has been sent to your email address. Please check your inbox.',
-#             'success_message': 'Account created successfully'
-#         })
-#     else:
-#         return jsonify({'message': 'You do not have permission to create recruiter accounts.'})
-
 
 # @app.route('/signup', methods=['POST'])
 # def signup():
@@ -1007,62 +719,62 @@ def signup():
 
 
 
-# @app.route('/signup', methods=['POST'])
-# def signup():
-#     data = request.json
-#     user_id = data.get('user_id')  # Using get method to avoid KeyError
-#     user = User.query.filter_by(id=user_id).first()
+@app.route('/signup', methods=['POST'])
+def signup():
+    data = request.json
+    user_id = data.get('user_id')  # Using get method to avoid KeyError
+    user = User.query.filter_by(id=user_id).first()
 
-#     if not user:
-#         return jsonify({'status': 'error', 'message': 'Invalid user ID or user does not exist.'})
+    if not user:
+        return jsonify({'status': 'error', 'message': 'Invalid user ID or user does not exist.'})
 
-#     user_type = user.user_type
-#     user_name = user.username
+    user_type = user.user_type
+    user_name = user.username
 
-#     if user_type == 'management':
-#         username = data.get('username')
-#         name = data.get('name')
-#         email = data.get('email')
-#         user_type = data.get('user_type')
+    if user_type == 'management':
+        username = data.get('username')
+        name = data.get('name')
+        email = data.get('email')
+        user_type = data.get('user_type')
 
-#         # Check if required fields are provided
-#         if not all([username, name, email, user_type]):
-#             return jsonify({'status': 'error', 'message': 'All fields are required'})
+        # Check if required fields are provided
+        if not all([username, name, email, user_type]):
+            return jsonify({'status': 'error', 'message': 'All fields are required'})
 
-#         # Generate a random password
-#         password = generate_random_password()
-#         hashed_password = hashlib.sha256(password.encode()).hexdigest()
+        # Generate a random password
+        password = generate_random_password()
+        hashed_password = hashlib.sha256(password.encode()).hexdigest()
 
-#         created_by = user_name
+        created_by = user_name
 
-#         existing_user = User.query.filter(or_(User.username == username, User.email == email, User.name == name)).first()
+        existing_user = User.query.filter(or_(User.username == username, User.email == email, User.name == name)).first()
 
-#         if existing_user:
-#             return jsonify({'status': 'error', 'message': 'Account with the same Username, Email, or Name already exists.'})
+        if existing_user:
+            return jsonify({'status': 'error', 'message': 'Account with the same Username, Email, or Name already exists.'})
 
-#         new_user = User(username=username, password=hashed_password, name=name, email=email, user_type=user_type, created_by=created_by)
+        new_user = User(username=username, password=hashed_password, name=name, email=email, user_type=user_type, created_by=created_by)
         
-#         db.session.add(new_user)
-#         db.session.commit()
+        db.session.add(new_user)
+        db.session.commit()
 
-#         # Generate a verification token
-#         verification_token = generate_verification_token(new_user.id)
+        # Generate a verification token
+        verification_token = generate_verification_token(new_user.id)
 
-#         # Create the verification link
-#         verification_link = url_for('verify', token=verification_token, _external=True)
+        # Create the verification link
+        verification_link = url_for('verify', token=verification_token, _external=True)
 
-#         # Send the verification email
-#         msg = Message('Account Verification', sender='saiganeshkanuparthi@gmail.com', recipients=[new_user.email])
-#         msg.body = f'Hello {new_user.name},\n\n We are pleased to inform you that your account has been successfully created for the ATS Makonis Talent Track Pro. Here are your login credentials:\n\nUsername: {new_user.username}\nPassword: {password}\n\n Please note that the verification link will expire after 24 hours. \n\n After successfully verifying your account, you can access the application using the following link : \n\n Application Link (Post Verification): https://ats-makonis.netlify.app/ \n\n To verify your account, please click on the following link: {verification_link} \n\n If you have any questions or need assistance, please feel free to reach out. \n\n Best regards, '
-#         mail.send(msg)
+        # Send the verification email
+        msg = Message('Account Verification', sender='saiganeshkanuparthi@gmail.com', recipients=[new_user.email])
+        msg.body = f'Hello {new_user.name},\n\n We are pleased to inform you that your account has been successfully created for the ATS Makonis Talent Track Pro. Here are your login credentials:\n\nUsername: {new_user.username}\nPassword: {password}\n\n Please note that the verification link will expire after 24 hours. \n\n After successfully verifying your account, you can access the application using the following link : \n\n Application Link (Post Verification): https://ats-makonis.netlify.app/ \n\n To verify your account, please click on the following link: {verification_link} \n\n If you have any questions or need assistance, please feel free to reach out. \n\n Best regards, '
+        mail.send(msg)
 
-#         # return jsonify({'message': 'A verification email has been sent to your email address. Please check your inbox.'})
-#         return jsonify({'status': 'success',
-#             'message': 'A verification email has been sent to your email address. Please check your inbox.',
-#             'success_message': 'Account created successfully'
-#             })
-#     else:
-#         return jsonify({'message': 'You do not have permission to create recruiter accounts.'})
+        # return jsonify({'message': 'A verification email has been sent to your email address. Please check your inbox.'})
+        return jsonify({'status': 'success',
+            'message': 'A verification email has been sent to your email address. Please check your inbox.',
+            'success_message': 'Account created successfully'
+            })
+    else:
+        return jsonify({'message': 'You do not have permission to create recruiter accounts.'})
 
 
 import hashlib
