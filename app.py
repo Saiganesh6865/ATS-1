@@ -9001,6 +9001,7 @@ def edit_job_post(job_post_id):
                     job_post.recruiter = ', '.join(list(recruiters))
                     
                     job_type = data.get('Job_Type')
+                    job_post.job_type = job_type
                     if job_type == 'Contract':
                         job_post.contract_in_months = data.get('Job_Type_details')
                     
