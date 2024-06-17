@@ -1925,9 +1925,14 @@ def assign_candidate_to_a_new_recruiter():
                     recruiters_list.append(new_recruiter_username)
                     job_post.recruiter = ", ".join(recruiters_list)
 
+                    # # Add new notification for the new recruiter
+                    # new_notification = Notification(job_post_id=job_id, recruiter_name=new_recruiter_username, num_notification=1)
+                    # db.session.add(new_notification)
+                    
                     # Add new notification for the new recruiter
-                    new_notification = Notification(job_post_id=job_id, recruiter_name=new_recruiter_username, num_notification=1)
+                    new_notification = Notification(job_post_id=job_id, recruiter_name=new_recruiter_username)
                     db.session.add(new_notification)
+                    new_notification.num_notification = 1
 
                     # Send new job post notification to the new recruiter
                     new_recruiter = User.query.filter_by(username=new_recruiter_username).first()
