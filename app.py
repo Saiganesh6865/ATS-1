@@ -472,12 +472,12 @@ def generate_otp():
                     }}
                     .container {{
                         background-color: #ffffff;
-                        max-width: 150px;
+                        max-width: 600px;
                         margin: 0 auto;
                         padding: 20px;
-                        # border: 1px solid #dddddd;
-                        # border-radius: 8px;
-                        # box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+                        border: 1px solid #dddddd;
+                        border-radius: 8px;
+                        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
                     }}
                     .header {{
                         font-size: 24px;
@@ -492,18 +492,15 @@ def generate_otp():
                     }}
                     .otp-label {{
                         display: block;
-                        float: left;
-                        width: 200px;
-                        text-align: left;
-                        margin-right: 10px;
+                        margin-bottom: 10px;
+                        font-weight: bold;
                     }}
                     .otp-input {{
-                        width: calc(50% - 100px);
+                        width: 50%;
                         padding: 10px;
                         background-color: #f9f9f9;
-                        # border: 1px solid #cccccc;
-                        # border-radius: 5px;
-                        # box-sizing: border-box;
+                        border-radius: 2px;
+                        box-sizing: border-box;
                         font-size: 16px;
                     }}
                     .footer {{
