@@ -692,7 +692,7 @@ def generate_otp():
 #         return jsonify({'status': 'error', 'message': 'Invalid request method.'})
     
 
-import hashlib
+
 
 @app.route('/reset_password', methods=['POST'])
 def reset_password():
