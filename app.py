@@ -472,12 +472,12 @@ def generate_otp():
                     }}
                     .container {{
                         background-color: #ffffff;
-                        max-width: 600px;
+                        max-width: 150px;
                         margin: 0 auto;
                         padding: 20px;
-                        border: 1px solid #dddddd;
-                        border-radius: 8px;
-                        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+                        # border: 1px solid #dddddd;
+                        # border-radius: 8px;
+                        # box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
                     }}
                     .header {{
                         font-size: 24px;
@@ -498,12 +498,12 @@ def generate_otp():
                         margin-right: 10px;
                     }}
                     .otp-input {{
-                        width: calc(100% - 210px);
+                        width: calc(50% - 100px);
                         padding: 10px;
                         background-color: #f9f9f9;
-                        border: 1px solid #cccccc;
-                        border-radius: 5px;
-                        box-sizing: border-box;
+                        # border: 1px solid #cccccc;
+                        # border-radius: 5px;
+                        # box-sizing: border-box;
                         font-size: 16px;
                     }}
                     .footer {{
@@ -519,7 +519,7 @@ def generate_otp():
                     <div class="header">New OTP Generated</div>
                     <div class="content">
                         <p>Hi {user.name},</p>
-                        <p><span class="otp-label">OTP for resetting your password:</span></p>
+                        <p>OTP for resetting your password:</p>
                         <p><input type="text" class="otp-input" id="otp" value="{otp}" readonly></p>
                     </div>
                     <div class="footer">
@@ -4746,13 +4746,20 @@ def delete_candidate(candidate_id):
     user_id = data['user_id']
     user = User.query.filter_by(id=user_id).first()
     user_type = user.user_type
-    username=user.username
-    
+    username = user.username
+
     if user_type == 'management':
         candidate = Candidate.query.filter_by(id=candidate_id).first()
 
         if candidate:
             if request.method == "POST":
+                # Check for null values
+                if None in [candidate.name, candidate.email, candidate.client, candidate.profile, candidate.status]:
+                    # If any value is null, delete the candidate
+                    Candidate.query.filter_by(id=candidate_id).delete()
+                    db.session.commit()
+                    return jsonify({'status': 'success', "message": "Candidate details deleted successfully"})
+
                 # Save deletion details before deleting the candidate
                 deleted_candidate = Deletedcandidate(
                     username=username,
@@ -4769,7 +4776,7 @@ def delete_candidate(candidate_id):
                 Candidate.query.filter_by(id=candidate_id).delete()
                 db.session.commit()
 
-                return jsonify({'status': 'success',"message": "Candidate details deleted successfully"})
+                return jsonify({'status': 'success', "message": "Candidate details deleted successfully"})
 
             return jsonify({
                 "candidate": {
@@ -4784,9 +4791,58 @@ def delete_candidate(candidate_id):
             })
 
         else:
-            return jsonify({'status': 'error',"message": "Candidate not found"}), 404
+            return jsonify({'status': 'error', "message": "Candidate not found"})
 
-    return jsonify({'status': 'error',"message": "Unauthorized: Only management can delete candidates"}), 401
+    return jsonify({'status': 'error', "message": "Unauthorized: Only management can delete candidates"})
+
+
+# @app.route('/delete_candidate/<int:candidate_id>', methods=["POST"])
+# def delete_candidate(candidate_id):
+#     data = request.json
+#     user_id = data['user_id']
+#     user = User.query.filter_by(id=user_id).first()
+#     user_type = user.user_type
+#     username=user.username
+    
+#     if user_type == 'management':
+#         candidate = Candidate.query.filter_by(id=candidate_id).first()
+
+#         if candidate:
+#             if request.method == "POST":
+#                 # Save deletion details before deleting the candidate
+#                 deleted_candidate = Deletedcandidate(
+#                     username=username,
+#                     candidate_name=candidate.name,
+#                     candidate_email=candidate.email,
+#                     client=candidate.client,
+#                     profile=candidate.profile,
+#                     status=candidate.status
+#                 )
+#                 db.session.add(deleted_candidate)
+#                 db.session.commit()
+
+#                 # Delete the candidate
+#                 Candidate.query.filter_by(id=candidate_id).delete()
+#                 db.session.commit()
+
+#                 return jsonify({'status': 'success',"message": "Candidate details deleted successfully"})
+
+#             return jsonify({
+#                 "candidate": {
+#                     "id": candidate.id,
+#                     "name": candidate.name,
+#                     "email": candidate.email,
+#                     "client": candidate.client,
+#                     "profile": candidate.profile,
+#                     "status": candidate.status
+#                 },
+#                 "user_name": username
+#             })
+
+#         else:
+#             return jsonify({'status': 'error',"message": "Candidate not found"}), 404
+
+#     return jsonify({'status': 'error',"message": "Unauthorized: Only management can delete candidates"}), 401
 
 
 @app.route('/delete_candidate_recruiter/<int:candidate_id>', methods=["GET", "POST"])
