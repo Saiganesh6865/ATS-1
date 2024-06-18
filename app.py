@@ -499,8 +499,8 @@ def generate_otp():
                         width: 50%;
                         padding: 10px;
                         background-color: #f9f9f9;
-                        border-radius: 2px;
-                        box-sizing: border-box;
+                        # border-radius: 2px;
+                        # box-sizing: border-box;
                         font-size: 16px;
                     }}
                     .footer {{
