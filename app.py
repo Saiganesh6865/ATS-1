@@ -2975,6 +2975,7 @@ def date_handler(obj):
         return obj.isoformat()
     else:
         return None
+        
 @app.route('/dashboard', methods=['POST'])
 def dashboard():
     data = request.json
@@ -3083,9 +3084,9 @@ def dashboard():
                 'highest_package_in_lpa': candidate.package_in_lpa,
                 'buyout': candidate.buyout,
                 'date_created': candidate.date_created.isoformat() if candidate.date_created else None,
-                'time_created': candidate.time_created.isoformat() if candidate.time_created else None,
+                'time_created': candidate.time_created.strftime('%H:%M:%S') if candidate.time_created else None,
                 'data_updated_date': candidate.data_updated_date.isoformat() if candidate.data_updated_date else None,
-                'data_updated_time': candidate.data_updated_time.isoformat() if candidate.data_updated_time else None,
+                'data_updated_time': candidate.data_updated_time.strftime('%H:%M:%S') if candidate.data_updated_time else None,
                 'resume_present': candidate.resume_present
             } for candidate in candidates],
             'jobs': [{
@@ -3105,14 +3106,14 @@ def dashboard():
                 'recruiter': job.recruiter,
                 'management': job.management,
                 'date_created': job.date_created.isoformat() if job.date_created else None,
-                'time_created': job.time_created.isoformat() if job.time_created else None,
+                'time_created': job.time_created.strftime('%H:%M:%S') if job.time_created else None,
                 'job_status': job.job_status,
                 'job_type': job.job_type,
                 'contract_in_months': job.contract_in_months,
                 'skills': job.skills,
                 'notification': job.notification,
                 'data_updated_date': job.data_updated_date.isoformat() if job.data_updated_date else None,
-                'data_updated_time': job.data_updated_time.isoformat() if job.data_updated_time else None,
+                'data_updated_time': job.data_updated_time.strftime('%H:%M:%S') if job.data_updated_time else None,
                 'jd_pdf_present': job.jd_pdf_present
             } for job in jobs],
             'edit_candidate_message': edit_candidate_message,
@@ -3177,9 +3178,9 @@ def dashboard():
                 'highest_package_in_lpa': candidate.package_in_lpa,
                 'buyout': candidate.buyout,
                 'date_created': candidate.date_created.isoformat() if candidate.date_created else None,
-                'time_created': candidate.time_created.isoformat() if candidate.time_created else None,
+                'time_created': candidate.time_created.strftime('%H:%M:%S') if candidate.time_created else None,
                 'data_updated_date': candidate.data_updated_date.isoformat() if candidate.data_updated_date else None,
-                'data_updated_time': candidate.data_updated_time.isoformat() if candidate.data_updated_time else None,
+                'data_updated_time': candidate.data_updated_time.strftime('%H:%M:%S') if candidate.data_updated_time else None,
                 'resume_present': candidate.resume_present
             } for candidate in candidates],
             'jobs': [{
@@ -3199,14 +3200,14 @@ def dashboard():
                 'recruiter': job.recruiter,
                 'management': job.management,
                 'date_created': job.date_created.isoformat() if job.date_created else None,
-                'time_created': job.time_created.isoformat() if job.time_created else None,
+                'time_created': job.time_created.strftime('%H:%M:%S') if job.time_created else None,
                 'job_status': job.job_status,
                 'job_type': job.job_type,
                 'contract_in_months': job.contract_in_months,
                 'skills': job.skills,
                 'notification': job.notification,
                 'data_updated_date': job.data_updated_date.isoformat() if job.data_updated_date else None,
-                'data_updated_time': job.data_updated_time.isoformat() if job.data_updated_time else None,
+                'data_updated_time': job.data_updated_time.strftime('%H:%M:%S') if job.data_updated_time else None,
                 'jd_pdf_present': job.jd_pdf_present
             } for job in jobs],
             'signup_message': signup_message,
@@ -3269,9 +3270,9 @@ def dashboard():
                 'total_offers': candidate.total,
                 'highest_package_in_lpa': candidate.package_in_lpa,
                 'date_created': candidate.date_created.isoformat() if candidate.date_created else None,
-                'time_created': candidate.time_created.isoformat() if candidate.time_created else None,
+                'time_created': candidate.time_created.strftime('%H:%M:%S') if candidate.time_created else None,
                 'data_updated_date': candidate.data_updated_date.isoformat() if candidate.data_updated_date else None,
-                'data_updated_time': candidate.data_updated_time.isoformat() if candidate.data_updated_time else None,
+                'data_updated_time': candidate.data_updated_time.strftime('%H:%M:%S') if candidate.data_updated_time else None,
                 'resume_present': candidate.resume_present
             } for candidate in candidates],
         }
