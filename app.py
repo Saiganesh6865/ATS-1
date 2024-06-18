@@ -444,7 +444,6 @@ def generate_6otp():
     return otp
 
 
-
 @app.route('/generate_otp', methods=['POST'])
 def generate_otp():
     if request.method == 'POST':
@@ -456,7 +455,7 @@ def generate_otp():
             otp = generate_6otp()
             user.otp = otp
             db.session.commit()
-            msg = Message('New OTP Notification', sender='saiganeshkanuparthi@gmail.com', recipients=[email])
+            msg = Message('New OTP Generated', sender='saiganeshkanuparthi@gmail.com', recipients=[email])
             msg.html = f'''
             <!DOCTYPE html>
             <html lang="en">
@@ -489,23 +488,22 @@ def generate_otp():
                     .content {{
                         font-size: 16px;
                         line-height: 1.6;
+                        display: flex;
+                        align-items: center;
                     }}
-                    .otp-container {{
-                        margin-top: 10px;
-                        position: relative;
+                    .otp-label {{
+                        flex: 1;
+                        text-align: left;
                     }}
-                    .otp {{
-                        background-color: #f9f9f9;
-                        padding: 10px;
-                        border: 1px solid #eeeeee;
-                        border-radius: 5px;
-                        margin-top: 10px;
-                        font-size: 20px;
-                        font-weight: bold;
-                        text-align: center;
-                        position: relative;
+                    .otp-input {{
+                        flex: 2;
                         width: 100%;
-                        box-sizing: border-box; /* Ensure padding and border are included in width */
+                        padding: 10px;
+                        border: 1px solid #cccccc;
+                        border-radius: 5px;
+                        box-sizing: border-box;
+                        margin-left: 10px;
+                        font-size: 16px;
                     }}
                     .footer {{
                         font-size: 12px;
@@ -519,13 +517,11 @@ def generate_otp():
                 <div class="container">
                     <div class="header">New OTP Generated</div>
                     <div class="content">
-                        <p>Hi {user.name},</p>
-                        <p>OTP for resetting your password:</p>
-                        <div class="otp-container">
-                            <input type="text" class="otp" id="otp" value="{otp}" readonly>
-                        </div>
+                        <div class="otp-label">OTP for resetting your password:</div>
+                        <input type="text" class="otp-input" id="otp" value="{otp}" readonly>
                     </div>
                     <div class="footer">
+                        <p>If you did not request this change, please contact our support team immediately.</p>
                         <p><b>Makonis Talent Track Pro Team</b></p>
                     </div>
                 </div>
@@ -538,6 +534,100 @@ def generate_otp():
             return jsonify({'status': 'error', 'message': 'User does not exist.'})
     else:
         return jsonify({'status': 'error', 'message': 'Invalid request method.'})
+
+# @app.route('/generate_otp', methods=['POST'])
+# def generate_otp():
+#     if request.method == 'POST':
+#         data = request.json
+#         username = data.get('username')
+#         email = data.get('email')
+#         user = User.query.filter_by(username=username, email=email).first()
+#         if user:
+#             otp = generate_6otp()
+#             user.otp = otp
+#             db.session.commit()
+#             msg = Message('New OTP Notification', sender='saiganeshkanuparthi@gmail.com', recipients=[email])
+#             msg.html = f'''
+#             <!DOCTYPE html>
+#             <html lang="en">
+#             <head>
+#                 <meta charset="UTF-8">
+#                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+#                 <style>
+#                     body {{
+#                         font-family: Arial, sans-serif;
+#                         background-color: #f4f4f4;
+#                         color: #333;
+#                         margin: 0;
+#                         padding: 20px;
+#                     }}
+#                     .container {{
+#                         background-color: #ffffff;
+#                         max-width: 600px;
+#                         margin: 0 auto;
+#                         padding: 20px;
+#                         border: 1px solid #dddddd;
+#                         border-radius: 8px;
+#                         box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+#                     }}
+#                     .header {{
+#                         font-size: 24px;
+#                         font-weight: bold;
+#                         margin-bottom: 20px;
+#                         color: #4CAF50;
+#                     }}
+#                     .content {{
+#                         font-size: 16px;
+#                         line-height: 1.6;
+#                     }}
+#                     .otp-container {{
+#                         margin-top: 10px;
+#                         position: relative;
+#                     }}
+#                     .otp {{
+#                         background-color: #f9f9f9;
+#                         padding: 10px;
+#                         border: 1px solid #eeeeee;
+#                         border-radius: 5px;
+#                         margin-top: 10px;
+#                         font-size: 20px;
+#                         font-weight: bold;
+#                         text-align: center;
+#                         position: relative;
+#                         width: 100%;
+#                         box-sizing: border-box; /* Ensure padding and border are included in width */
+#                     }}
+#                     .footer {{
+#                         font-size: 12px;
+#                         color: #999;
+#                         margin-top: 20px;
+#                         text-align: center;
+#                     }}
+#                 </style>
+#             </head>
+#             <body>
+#                 <div class="container">
+#                     <div class="header">New OTP Generated</div>
+#                     <div class="content">
+#                         <p>Hi {user.name},</p>
+#                         <p>OTP for resetting your password:</p>
+#                         <div class="otp-container">
+#                             <input type="text" class="otp" id="otp" value="{otp}" readonly>
+#                         </div>
+#                     </div>
+#                     <div class="footer">
+#                         <p><b>Makonis Talent Track Pro Team</b></p>
+#                     </div>
+#                 </div>
+#             </body>
+#             </html>
+#             '''
+#             mail.send(msg)
+#             return jsonify({'status': 'success', 'message': 'OTP has been sent to your email.'})
+#         else:
+#             return jsonify({'status': 'error', 'message': 'User does not exist.'})
+#     else:
+#         return jsonify({'status': 'error', 'message': 'Invalid request method.'})
 
 # @app.route('/generate_otp', methods=['POST'])
 # def generate_otp():
