@@ -692,9 +692,103 @@ def generate_otp():
 #         return jsonify({'status': 'error', 'message': 'Invalid request method.'})
     
 
-   
 import hashlib
 
+@app.route('/reset_password', methods=['POST'])
+def reset_password():
+    if request.method == 'POST':
+        data = request.json
+        otp = data['otp']
+        new_password = data.get('new_password')
+        confirm_password = data.get('confirm_password')
+        new_password_hashed = hashlib.sha256(new_password.encode()).hexdigest()
+
+        user = User.query.filter_by(otp=otp).first()
+
+        if user and user.otp == otp and new_password == confirm_password:
+            # Check if the new password is different from the old password
+            if new_password_hashed != user.password:  # comparing hashes
+                user.password = new_password_hashed
+                db.session.commit()
+                # Send the updated password to the user's email
+                msg = Message('Password Changed', sender='your-email@gmail.com', recipients=[user.email])
+                msg.html = f'''
+                <!DOCTYPE html>
+                <html lang="en">
+                <head>
+                    <meta charset="UTF-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <style>
+                        body {{
+                            font-family: Arial, sans-serif;
+                            background-color: #f4f4f4;
+                            color: #333;
+                            margin: 0;
+                            padding: 20px;
+                        }}
+                        .container {{
+                            background-color: #ffffff;
+                            max-width: 600px;
+                            margin: 0 auto;
+                            padding: 20px;
+                            border: 1px solid #dddddd;
+                            border-radius: 8px;
+                            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+                        }}
+                        .header {{
+                            font-size: 24px;
+                            font-weight: bold;
+                            margin-bottom: 20px;
+                            color: #4CAF50;
+                        }}
+                        .content {{
+                            font-size: 16px;
+                            line-height: 1.6;
+                        }}
+                        .credentials {{
+                            background-color: #f9f9f9;
+                            padding: 10px;
+                            border: 1px solid #eeeeee;
+                            border-radius: 5px;
+                            margin-top: 10px;
+                        }}
+                        .footer {{
+                            font-size: 12px;
+                            color: #999;
+                            margin-top: 20px;
+                            text-align: center;
+                        }}
+                    </style>
+                </head>
+                <body>
+                    <div class="container">
+                        <div class="header">Password Changed</div>
+                        <div class="content">
+                            <p>Hello {user.name},</p>
+                            <p>Your password has been successfully changed. </p>
+                            <p>Here are your updated credentials:,</p>
+                            <div class="credentials">
+                                <p><strong>Username:</strong> {user.username}</p>
+                                <p><strong>Password:</strong> {new_password}</p>
+                            </div>
+                        </div>
+                        <div class="footer">
+                            <p>If you did not request this change, please contact our support team immediately.</p>
+                            <p><b>Makonis Talent Track Pro Team</b></p>
+                        </div>
+                    </div>
+                </body>
+                </html>
+                '''
+                mail.send(msg)
+
+                return jsonify({'status': 'success', 'message': 'Password changed successfully.'})
+            else:
+                return jsonify({'status': 'error', 'message': 'New password is the same as the old password'})
+        else:
+            return jsonify({'status': 'error', 'message': 'Invalid OTP or password confirmation. Please try again.'})
+
+    return jsonify({'status': 'error', 'message': 'Invalid request method.'})
 
 # @app.route('/reset_password', methods=['POST'])
 # def reset_password():
