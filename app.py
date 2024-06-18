@@ -498,10 +498,12 @@ def generate_otp():
                     .otp-input {{
                         width: 50%;
                         padding: 10px;
+                       font-size: 20px;
+                        font-weight: bold;
+                        border: 1px solid #eeeeee;
+                        border-radius: 5px;
                         background-color: #f9f9f9;
-                        # border-radius: 2px;
-                        # box-sizing: border-box;
-                        font-size: 16px;
+                        box-sizing: border-box;
                     }}
                     .footer {{
                         font-size: 12px;
