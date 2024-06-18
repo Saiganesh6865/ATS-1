@@ -470,9 +470,10 @@ import hashlib
 @app.route('/reset_password', methods=['POST'])
 def reset_password():
     if request.method == 'POST':
-        otp = request.json['otp']
-        new_password = request.json.get('new_password')
-        confirm_password = request.json.get('confirm_password')
+        data = request.json
+        otp = data['otp']
+        new_password = data.get('new_password')
+        confirm_password = data.get('confirm_password')
         new_password_hashed = hashlib.sha256(new_password.encode()).hexdigest()
 
         user = User.query.filter_by(otp=otp).first()
@@ -483,8 +484,74 @@ def reset_password():
                 user.password = new_password_hashed
                 db.session.commit()
                 # Send the updated password to the user's email
-                msg = Message('Password Changed', sender='saiganeshkanuparthi@gmail.com', recipients=[user.email])
-                msg.body = f'Hello {user.name},\n\nYour password has been successfully changed. Here are your updated credentials:\n\nUsername: {user.username}\nPassword: {new_password}'
+                msg = Message('Password Changed', sender='your-email@gmail.com', recipients=[user.email])
+                msg.html = f'''
+                <!DOCTYPE html>
+                <html lang="en">
+                <head>
+                    <meta charset="UTF-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <style>
+                        body {{
+                            font-family: Arial, sans-serif;
+                            background-color: #f4f4f4;
+                            color: #333;
+                            margin: 0;
+                            padding: 20px;
+                        }}
+                        .container {{
+                            background-color: #ffffff;
+                            max-width: 600px;
+                            margin: 0 auto;
+                            padding: 20px;
+                            border: 1px solid #dddddd;
+                            border-radius: 8px;
+                            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+                        }}
+                        .header {{
+                            font-size: 24px;
+                            font-weight: bold;
+                            margin-bottom: 20px;
+                            color: #4CAF50;
+                        }}
+                        .content {{
+                            font-size: 16px;
+                            line-height: 1.6;
+                        }}
+                        .credentials {{
+                            background-color: #f9f9f9;
+                            padding: 10px;
+                            border: 1px solid #eeeeee;
+                            border-radius: 5px;
+                            margin-top: 10px;
+                        }}
+                        .footer {{
+                            font-size: 12px;
+                            color: #999;
+                            margin-top: 20px;
+                            text-align: center;
+                        }}
+                    </style>
+                </head>
+                <body>
+                    <div class="container">
+                        <div class="header">Password Changed</div>
+                        <div class="content">
+                            <p>Hello {user.name},</p>
+                            <p>Your password has been successfully changed. Here are your updated credentials:</p>
+                            <div class="credentials">
+                                <p><strong>Username:</strong> {user.username}</p>
+                                <p><strong>Password:</strong> {new_password}</p>
+                            </div>
+                        </div>
+                        <div class="footer">
+                            <p>If you did not request this change, please contact our support team immediately.</p>
+                            # <p>&copy; 2024 Your Company. All rights reserved.</p>
+                        </div>
+                    </div>
+                </body>
+                </html>
+                '''
                 mail.send(msg)
 
                 return jsonify({'status': 'success', 'message': 'Password changed successfully.'})
@@ -494,6 +561,35 @@ def reset_password():
             return jsonify({'status': 'error', 'message': 'Invalid OTP or password confirmation. Please try again.'})
 
     return jsonify({'status': 'error', 'message': 'Invalid request method.'})
+
+
+# @app.route('/reset_password', methods=['POST'])
+# def reset_password():
+#     if request.method == 'POST':
+#         otp = request.json['otp']
+#         new_password = request.json.get('new_password')
+#         confirm_password = request.json.get('confirm_password')
+#         new_password_hashed = hashlib.sha256(new_password.encode()).hexdigest()
+
+#         user = User.query.filter_by(otp=otp).first()
+
+#         if user and user.otp == otp and new_password == confirm_password:
+#             # Check if the new password is different from the old password
+#             if new_password_hashed != user.password:  # comparing hashes
+#                 user.password = new_password_hashed
+#                 db.session.commit()
+#                 # Send the updated password to the user's email
+#                 msg = Message('Password Changed', sender='saiganeshkanuparthi@gmail.com', recipients=[user.email])
+#                 msg.body = f'Hello {user.name},\n\nYour password has been successfully changed. Here are your updated credentials:\n\nUsername: {user.username}\nPassword: {new_password}'
+#                 mail.send(msg)
+
+#                 return jsonify({'status': 'success', 'message': 'Password changed successfully.'})
+#             else:
+#                 return jsonify({'status': 'error', 'message': 'New password is the same as the old password'})
+#         else:
+#             return jsonify({'status': 'error', 'message': 'Invalid OTP or password confirmation. Please try again.'})
+
+#     return jsonify({'status': 'error', 'message': 'Invalid request method.'})
 
 
 
@@ -8652,6 +8748,7 @@ def deactivate_user():
 import hashlib
 from flask_mail import Message
 
+
 @app.route('/change_password', methods=['POST'])
 def change_password():
     data = request.json
@@ -8688,64 +8785,130 @@ def change_password():
     user.password = hashed_new_password
     db.session.commit()
 
-    msg = Message('Password Changed', sender='saiganeshkanuparthi@gmail.com', recipients=[user.email])
-    msg.body = f'Hello {user.username},\n\nYour password has been successfully changed. Here are your updated credentials:\n\nUsername: {user.username}\nPassword: {new_password}'
+    msg = Message('Password Changed', sender='your-email@gmail.com', recipients=[user.email])
+    msg.html = f'''
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+            body {{
+                font-family: Arial, sans-serif;
+                background-color: #f4f4f4;
+                color: #333;
+                margin: 0;
+                padding: 20px;
+            }}
+            .container {{
+                background-color: #ffffff;
+                max-width: 600px;
+                margin: 0 auto;
+                padding: 20px;
+                border: 1px solid #dddddd;
+                border-radius: 8px;
+                box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            }}
+            .header {{
+                font-size: 24px;
+                font-weight: bold;
+                margin-bottom: 20px;
+                color: #4CAF50;
+            }}
+            .content {{
+                font-size: 16px;
+                line-height: 1.6;
+            }}
+            .credentials {{
+                background-color: #f9f9f9;
+                padding: 10px;
+                border: 1px solid #eeeeee;
+                border-radius: 5px;
+                margin-top: 10px;
+            }}
+            .footer {{
+                font-size: 12px;
+                color: #999;
+                margin-top: 20px;
+                text-align: center;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">Password Changed</div>
+            <div class="content">
+                <p>Hello {user.username},</p>
+                <p>Your password has been successfully changed.</p>
+                <p>Here are your updated credentials:</p>
+                <div class="credentials">
+                    <p><strong>Username:</strong> {user.username}</p>
+                    <p><strong>Password:</strong> {new_password}</p>
+                </div>
+            </div>
+            <div class="footer">
+                <p>If you did not request this change, please contact our support team immediately.</p>
+                # <p>&copy; 2024 Your Company. All rights reserved.</p>
+            </div>
+        </div>
+    </body>
+    </html>
+    '''
     mail.send(msg)
 
     if user.user_type == 'management':
         return jsonify({'status': 'success', 'message': 'Password changed successfully for management user.'})
     elif user.user_type == 'recruiter':
         return jsonify({'status': 'success', 'message': 'Password changed successfully for recruiter user.'})
+    else:
+        return jsonify({'status': 'success', 'message': 'Password changed successfully.'})
+
 
 # @app.route('/change_password', methods=['POST'])
 # def change_password():
 #     data = request.json
-    
-#     if data:
-#         user_id = data.get('user_id')
-#         user = User.query.filter_by(id=user_id).first()
 
-#         if user:
-#             user_name = user.username
-#             user_type = user.user_type
+#     if not data:
+#         return jsonify({'status': 'error', 'message': 'No JSON data provided.'})
 
-#             username = data.get('username')
-#             old_password = data.get('old_password')
-#             new_password = data.get('new_password')
-#             confirm_password = data.get('confirm_password')
+#     user_id = data.get('user_id')
+#     username = data.get('username')
+#     old_password = data.get('old_password')
+#     new_password = data.get('new_password')
+#     confirm_password = data.get('confirm_password')
 
-#             if username == user_name:
-#                 # Check if the provided old password matches the one stored in the database
-#                 hashed_old_password = hashlib.sha256(old_password.encode()).hexdigest()
-#                 if user.password == hashed_old_password:
-#                     if new_password == confirm_password:
-#                         # Hash the new password before storing it in the database
-#                         hashed_new_password = hashlib.sha256(new_password.encode()).hexdigest()
-#                         user.password = hashed_new_password
-#                         db.session.commit()
+#     user = User.query.filter_by(id=user_id).first()
 
-#                         # Send the password change notification email
-#                         msg = Message('Password Changed', sender='saiganeshkanuparthi@gmail.com', recipients=[user.email])
-#                         msg.body = f'Hello {user.name},\n\nYour password has been successfully changed. Here are your updated credentials:\n\nUsername: {user.username}\nPassword: {new_password}'
-#                         mail.send(msg)
+#     if not user:
+#         return jsonify({'status': 'error', 'message': 'User not found.'})
 
-#                         if user_type == 'management':
-#                             return jsonify({'status': 'success',"message": "Password changed successfully for management user."})
-#                         else:
-#                             return jsonify({'status': 'success',"message": "Password changed successfully for recruiter user."})
-#                     else:
-#                         return jsonify({'status': 'error',"message": "New password and confirm password do not match."}) 
-#                 else:
-#                     return jsonify({'status': 'error',"message": "Invalid old password."})
-#             else:
-#                 # return jsonify({'status': 'error',"message": "Logged in user does not match the provided username."})
-#                  return jsonify({'status': 'error',"message": "User not found."})
-#         else:
-#             return jsonify({'status': 'error',"message": "User not found."})
-#     else:
-#         return jsonify({'status': 'error',"message": "No JSON data provided."})
+#     if username != user.username:
+#         return jsonify({'status': 'error', 'message': 'Logged in user does not match the provided username.'})
 
-    # return jsonify({"error": "Unauthorized: You must log in to access this page"})
+#     hashed_old_password = hashlib.sha256(old_password.encode()).hexdigest()
+
+#     if user.password != hashed_old_password:
+#         return jsonify({'status': 'error', 'message': 'Invalid old password.'})
+
+#     if old_password == new_password:
+#         return jsonify({'status': 'error', 'message': 'New password cannot be the same as the old password.'})
+
+#     if new_password != confirm_password:
+#         return jsonify({'status': 'error', 'message': 'New password and confirm password is not matching.'})
+
+#     hashed_new_password = hashlib.sha256(new_password.encode()).hexdigest()
+#     user.password = hashed_new_password
+#     db.session.commit()
+
+#     msg = Message('Password Changed', sender='saiganeshkanuparthi@gmail.com', recipients=[user.email])
+#     msg.body = f'Hello {user.username},\n\nYour password has been successfully changed. Here are your updated credentials:\n\nUsername: {user.username}\nPassword: {new_password}'
+#     mail.send(msg)
+
+#     if user.user_type == 'management':
+#         return jsonify({'status': 'success', 'message': 'Password changed successfully for management user.'})
+#     elif user.user_type == 'recruiter':
+#         return jsonify({'status': 'success', 'message': 'Password changed successfully for recruiter user.'})
+
 
 
 @app.route('/delete_job_post_message/<int:job_id>')
