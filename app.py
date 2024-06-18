@@ -444,6 +444,7 @@ def generate_6otp():
     return otp
 
 
+
 @app.route('/generate_otp', methods=['POST'])
 def generate_otp():
     if request.method == 'POST':
@@ -455,13 +456,14 @@ def generate_otp():
             otp = generate_6otp()
             user.otp = otp
             db.session.commit()
-            msg = Message('Account Verification', sender='your-email@gmail.com', recipients=[email])
+            msg = Message('New OTP Generated', sender='your-email@gmail.com', recipients=[email])
             msg.html = f'''
             <!DOCTYPE html>
             <html lang="en">
             <head>
                 <meta charset="UTF-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
                 <style>
                     body {{
                         font-family: Arial, sans-serif;
@@ -505,15 +507,12 @@ def generate_otp():
                         flex-grow: 1;
                         box-sizing: border-box;
                     }}
-                    .copy-image {{
-                        cursor: pointer;
-                        margin-left: 10px;
-                        width: 24px;
-                        height: 24px;
+                    .copy-icon {{
                         position: absolute;
-                        right: 10px;
+                        right: 5px;
                         top: 50%;
                         transform: translateY(-50%);
+                        cursor: pointer;
                     }}
                     .footer {{
                         font-size: 12px;
@@ -525,15 +524,15 @@ def generate_otp():
             </head>
             <body>
                 <div class="container">
-                    <div class="header">Account Verification</div>
+                    <div class="header">New OTP Generated</div>
                     <div class="content">
                         <p>Hi {user.name},</p>
                         <p>OTP for resetting your password:</p>
                         <div class="otp-container">
                             <input type="text" class="otp" id="otp" value="{otp}" readonly>
-                            <img src="data:image/svg+xml;utf8,<?xml version='1.0' encoding='UTF-8'?><svg version='1.1' id='Layer_1' xmlns='http://www.w3.org/2000/svg' xmlns:xlink='http://www.w3.org/1999/xlink' x='0px' y='0px' viewBox='0 0 115.77 122.88' style='enable-background:new 0 0 115.77 122.88;' xml:space='preserve'><style type='text/css'>.st0{{fill-rule:evenodd;clip-rule:evenodd;}}</style><g><path class='st0' d='M89.62,13.96v7.73h12.19h0.01v0.02c3.85,0.01,7.34,1.57,9.86,4.1c2.5,2.51,4.06,5.98,4.07,9.82h0.02v0.02 v73.27v0.01h-0.02c-0.01,3.84-1.57,7.33-4.1,9.86c-2.51,2.5-5.98,4.06-9.82,4.07v0.02h-0.02h-61.7H40.1v-0.02 c-3.84-0.01-7.34-1.57-9.86-4.1c-2.5-2.51-4.06-5.98-4.07-9.82h-0.02v-0.02V92.51H13.96h-0.01v-0.02c-3.84-0.01-7.34-1.57-9.86-4.1 c-2.5-2.51-4.06-5.98-4.07-9.82H0v-0.02V13.96v-0.01h0.02c0.01-3.85,1.58-7.34,4.1-9.86c2.51-2.5,5.98-4.06,9.82-4.07V0h0.02h61.7 h0.01v0.02c3.85,0.01,7.34,1.57,9.86,4.1c2.5,2.51,4.06,5.98,4.07,9.82h0.02V13.96L89.62,13.96z M79.04,21.69v-7.73v-0.02h0.02 c0-0.91-0.39-1.75-1.01-2.37c-0.61-0.61-1.46-1-2.37-1v0.02h-0.01h-61.7h-0.02v-0.02c-0.91,0-1.75,0.39-2.37,1.01 c-0.61,0.61-1,1.46-1,2.37h0.02v0.01v64.59v0.02h-0.02c0,0.91,0.39,1.75,1.01,2.37c0.61,0.61,1.46,1,2.37,1v-0.02h0.01h12.19V35.65 v-0.01h0.02c0.01-3.85,1.58-7.34,4.1-9.86c2.51-2.5,5.98-4.06,9.82-4.07v-0.02h0.02H79.04L79.04,21.69z M105.18,108.92V35.65v-0.02 h0.02c0-0.91-0.39-1.75-1.01-2.37c-0.61-0.61-1.46-1-2.37-1v0.02h-0.01h-61.7h-0.02v-0.02c-0.91,0-1.75,0.39-2.37,1.01 c-0.61,0.61-1,1.46-1,2.37h0.02v0.01v73.27v0.02h-0.02c0,0.91,0.39,1.75,1.01,2.37c0.61,0.61,1.46,1,2.37,1v-0.02h0.01h61.7h0.02 v0.02c0.91,0,1.75-0.39,2.37-1.01c0.61-0.61,1-1.46,1-2.37h-0.02V108.92L105.18,108.92z'/></g></svg>' alt="Copy OTP" class="copy-image" onclick="copyOTP()">
+                            <i class="fas fa-copy copy-icon" onclick="copyOTP()"></i>
                         </div>
-                        <p>You can click the image to copy the OTP above and use it to reset your password.</p>
+                        <p>You can click the icon to copy the OTP above and use it to reset your password.</p>
                     </div>
                     <div class="footer">
                         <p>If you did not request this change, please contact our support team immediately.</p>
@@ -557,119 +556,6 @@ def generate_otp():
             return jsonify({'status': 'error', 'message': 'User does not exist.'})
     else:
         return jsonify({'status': 'error', 'message': 'Invalid request method.'})
-
-
-@app.route('/generate_otp', methods=['POST'])
-# def generate_otp():
-#     if request.method == 'POST':
-#         data = request.json
-#         username = data.get('username')
-#         email = data.get('email')
-#         user = User.query.filter_by(username=username, email=email).first()
-#         if user:
-#             otp = generate_6otp()
-#             user.otp = otp
-#             db.session.commit()
-#             msg = Message('New OTP Generated', sender='your-email@gmail.com', recipients=[email])
-#             msg.html = f'''
-#             <!DOCTYPE html>
-#             <html lang="en">
-#             <head>
-#                 <meta charset="UTF-8">
-#                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-#                 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
-#                 <style>
-#                     body {{
-#                         font-family: Arial, sans-serif;
-#                         background-color: #f4f4f4;
-#                         color: #333;
-#                         margin: 0;
-#                         padding: 20px;
-#                     }}
-#                     .container {{
-#                         background-color: #ffffff;
-#                         max-width: 600px;
-#                         margin: 0 auto;
-#                         padding: 20px;
-#                         border: 1px solid #dddddd;
-#                         border-radius: 8px;
-#                         box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-#                     }}
-#                     .header {{
-#                         font-size: 24px;
-#                         font-weight: bold;
-#                         margin-bottom: 20px;
-#                         color: #4CAF50;
-#                     }}
-#                     .content {{
-#                         font-size: 16px;
-#                         line-height: 1.6;
-#                     }}
-#                     .otp-container {{
-#                         margin-top: 10px;
-#                         position: relative;
-#                         display: flex;
-#                         align-items: center;
-#                     }}
-#                     .otp {{
-#                         font-size: 20px;
-#                         font-weight: bold;
-#                         padding: 10px;
-#                         border: 1px solid #eeeeee;
-#                         border-radius: 5px;
-#                         background-color: #f9f9f9;
-#                         flex-grow: 1;
-#                         box-sizing: border-box;
-#                     }}
-#                     .copy-icon {{
-#                         position: absolute;
-#                         right: 5px;
-#                         top: 50%;
-#                         transform: translateY(-50%);
-#                         cursor: pointer;
-#                     }}
-#                     .footer {{
-#                         font-size: 12px;
-#                         color: #999;
-#                         margin-top: 20px;
-#                         text-align: center;
-#                     }}
-#                 </style>
-#             </head>
-#             <body>
-#                 <div class="container">
-#                     <div class="header">New OTP Generated</div>
-#                     <div class="content">
-#                         <p>Hi {user.name},</p>
-#                         <p>OTP for resetting your password:</p>
-#                         <div class="otp-container">
-#                             <input type="text" class="otp" id="otp" value="{otp}" readonly>
-#                             <i class="fas fa-copy copy-icon" onclick="copyOTP()"></i>
-#                         </div>
-#                         <p>You can click the icon to copy the OTP above and use it to reset your password.</p>
-#                     </div>
-#                     <div class="footer">
-#                         <p>If you did not request this change, please contact our support team immediately.</p>
-#                         <p><b>Makonis Talent Track Pro Team</b></p>
-#                     </div>
-#                 </div>
-#                 <script>
-#                     function copyOTP() {{
-#                         var otpField = document.getElementById('otp');
-#                         otpField.select();
-#                         document.execCommand('copy');
-#                         alert('OTP copied to clipboard');
-#                     }}
-#                 </script>
-#             </body>
-#             </html>
-#             '''
-#             mail.send(msg)
-#             return jsonify({'status': 'success', 'message': 'OTP has been sent to your email.'})
-#         else:
-#             return jsonify({'status': 'error', 'message': 'User does not exist.'})
-#     else:
-#         return jsonify({'status': 'error', 'message': 'Invalid request method.'})
 
 
 # @app.route('/generate_otp', methods=['POST'])
