@@ -2152,8 +2152,7 @@ def job_transfered_to_new_recruiter_notification(recruiter_email, new_recruiter_
     msg.html = html_body
     mail.send(msg)
 
-
-# @app.route('/assign_candidate_new_recuriter', methods=['POST'])
+@app.route('/assign_candidate_new_recuriter', methods=['POST'])
 def assign_candidate_to_a_new_recruiter():
     data = request.json
 
@@ -2554,7 +2553,7 @@ def dashboard():
             .all()
 
         for candidate in candidates:
-            print(f"Candidate ID: {candidate.id}, Time Created: {candidate.time_created}")
+            # print(f"Candidate ID: {candidate.id}, Time Created: {candidate.time_created}")
 
         jobs = JobPost.query.all()
         
@@ -2648,7 +2647,7 @@ def dashboard():
             .all()
 
         for candidate in candidates:
-            print(f"Candidate ID: {candidate.id}, Time Created: {candidate.time_created}")
+            # print(f"Candidate ID: {candidate.id}, Time Created: {candidate.time_created}")
         
         response_data = {
             'user': {
@@ -2704,6 +2703,7 @@ def dashboard():
 
     # Create the response
     return response_json
+
 
 # def date_handler(obj):
 #     if isinstance(obj, date):
