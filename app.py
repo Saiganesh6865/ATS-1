@@ -456,7 +456,7 @@ def generate_otp():
             otp = generate_6otp()
             user.otp = otp
             db.session.commit()
-            msg = Message('Account Verification', sender='your-email@gmail.com', recipients=[email])
+            msg = Message('New OTP Notification', sender='saiganeshkanuparthi@gmail.com', recipients=[email])
             msg.html = f'''
             <!DOCTYPE html>
             <html lang="en">
@@ -490,6 +490,10 @@ def generate_otp():
                         font-size: 16px;
                         line-height: 1.6;
                     }}
+                    .otp-container {{
+                        margin-top: 10px;
+                        position: relative;
+                    }}
                     .otp {{
                         background-color: #f9f9f9;
                         padding: 10px;
@@ -500,18 +504,8 @@ def generate_otp():
                         font-weight: bold;
                         text-align: center;
                         position: relative;
-                    }}
-                    .copy-button {{
-                        display: inline-block;
-                        margin-top: 10px;
-                        padding: 10px 20px;
-                        font-size: 16px;
-                        color: #fff;
-                        background-color: #4CAF50;
-                        border: none;
-                        border-radius: 5px;
-                        cursor: pointer;
-                        text-decoration: none;
+                        width: 100%;
+                        box-sizing: border-box; /* Ensure padding and border are included in width */
                     }}
                     .footer {{
                         font-size: 12px;
@@ -523,34 +517,18 @@ def generate_otp():
             </head>
             <body>
                 <div class="container">
-                    <div class="header">Account Verification</div>
+                    <div class="header">New OTP Generated</div>
                     <div class="content">
                         <p>Hi {user.name},</p>
                         <p>OTP for resetting your password:</p>
-                        <div class="otp" id="otp">{otp}</div>
-                        <button class="copy-button" onclick="copyOTP()">Copy OTP</button>
-                        <div id="message"></div>
+                        <div class="otp-container">
+                            <input type="text" class="otp" id="otp" value="{otp}" readonly>
+                        </div>
                     </div>
                     <div class="footer">
-                        <p>If you did not request this change, please contact our support team immediately.</p>
-                        <p>&copy; 2024 Your Company. All rights reserved.</p>
+                        <p><b>Makonis Talent Track Pro Team</b></p>
                     </div>
                 </div>
-                <script>
-                    function copyOTP() {{
-                        var otp = document.getElementById("otp");
-                        otp.select();
-                        otp.setSelectionRange(0, 99999);
-                        navigator.clipboard.writeText(otp.value)
-                            .then(function() {{
-                                var message = document.getElementById("message");
-                                message.textContent = "OTP copied to clipboard!";
-                            }})
-                            .catch(function(err) {{
-                                console.error('Could not copy text: ', err);
-                            }});
-                    }}
-                </script>
             </body>
             </html>
             '''
