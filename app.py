@@ -790,6 +790,7 @@ def reset_password():
 
     return jsonify({'status': 'error', 'message': 'Invalid request method.'})
 
+
 # @app.route('/reset_password', methods=['POST'])
 # def reset_password():
 #     if request.method == 'POST':
