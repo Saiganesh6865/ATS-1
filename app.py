@@ -456,7 +456,7 @@ def generate_otp():
             otp = generate_6otp()
             user.otp = otp
             db.session.commit()
-            msg = Message('New OTP Generated', sender='your-email@gmail.com', recipients=[email])
+            msg = Message('New OTP Generated', sender='saiganeshkanuparthi@gmail.com', recipients=[email])
             msg.html = f'''
             <!DOCTYPE html>
             <html lang="en">
@@ -497,6 +497,12 @@ def generate_otp():
                         display: flex;
                         align-items: center;
                     }}
+                    .fas fa-copy copy-icon {{
+                         border: 1px solid #eeeeee;
+                        border-radius: 5px;
+                        color: "red"
+                    }}
+
                     .otp {{
                         font-size: 20px;
                         font-weight: bold;
