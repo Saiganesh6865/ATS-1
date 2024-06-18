@@ -2153,13 +2153,15 @@ def job_transfered_to_new_recruiter_notification(recruiter_email, new_recruiter_
     mail.send(msg)
 
 
-@app.route('/assign_candidate_new_recuriter', methods=['POST'])
+# @app.route('/assign_candidate_new_recuriter', methods=['POST'])
 def assign_candidate_to_a_new_recruiter():
     data = request.json
 
     try:
         candidates_data = ""
         current_datetime = datetime.now(pytz.timezone('Asia/Kolkata'))
+        new_recruiter = None
+        new_recruiter_name = ""
 
         for candidate_data in data['candidates']:
             candidate_id = candidate_data.get('candidate_id')
@@ -2236,13 +2238,14 @@ def assign_candidate_to_a_new_recruiter():
         db.session.commit()
 
         # Send notification email to the new recruiter for candidate assignment
-        if candidates_data:
+        if candidates_data and new_recruiter:
             assign_candidates_notification(new_recruiter.email, new_recruiter_name, candidates_data)
 
         return jsonify({'status': 'success', "message": "Candidates assigned successfully."})
     except Exception as e:
         db.session.rollback()
         return jsonify({'status': 'error', "error": f"Error assigning candidates: {str(e)}"}), 500
+
 
 
 # @app.route('/assign_candidate_new_recuriter', methods=['POST'])
