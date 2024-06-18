@@ -463,7 +463,6 @@ def generate_otp():
             <head>
                 <meta charset="UTF-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
                 <style>
                     body {{
                         font-family: Arial, sans-serif;
@@ -497,12 +496,6 @@ def generate_otp():
                         display: flex;
                         align-items: center;
                     }}
-                    .fas fa-copy copy-icon {{
-                         border: 1px solid #eeeeee;
-                        border-radius: 5px;
-                        color: "red"
-                    }}
-
                     .otp {{
                         font-size: 20px;
                         font-weight: bold;
@@ -530,15 +523,14 @@ def generate_otp():
             </head>
             <body>
                 <div class="container">
-                    <div class="header">New OTP Generated</div>
+                    <div class="header">New OTP Notification</div>
                     <div class="content">
                         <p>Hi {user.name},</p>
                         <p>OTP for resetting your password:</p>
                         <div class="otp-container">
                             <input type="text" class="otp" id="otp" value="{otp}" readonly>
-                            <i class="fas fa-copy copy-icon" onclick="copyOTP()"></i>
+                            <span class="copy-icon" onclick="copyOTP()">&#x2398;</span>
                         </div>
-                        <p>You can click the icon to copy the OTP above and use it to reset your password.</p>
                     </div>
                     <div class="footer">
                         <p>If you did not request this change, please contact our support team immediately.</p>
