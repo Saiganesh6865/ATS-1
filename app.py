@@ -2553,7 +2553,7 @@ def dashboard():
             .all()
 
         for candidate in candidates:
-            # print(f"Candidate ID: {candidate.id}, Time Created: {candidate.time_created}")
+            print(f"Candidate ID: {candidate.id}, Time Created: {candidate.time_created}")
 
         jobs = JobPost.query.all()
         
@@ -2647,7 +2647,7 @@ def dashboard():
             .all()
 
         for candidate in candidates:
-            # print(f"Candidate ID: {candidate.id}, Time Created: {candidate.time_created}")
+            print(f"Candidate ID: {candidate.id}, Time Created: {candidate.time_created}")
         
         response_data = {
             'user': {
