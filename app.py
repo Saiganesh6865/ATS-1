@@ -2704,7 +2704,6 @@ def dashboard():
     # Create the response
     return response_json
 
-
 # def date_handler(obj):
 #     if isinstance(obj, date):
 #         return obj.isoformat()
