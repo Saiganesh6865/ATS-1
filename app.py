@@ -444,7 +444,6 @@ def generate_6otp():
     return otp
 
 
-
 @app.route('/generate_otp', methods=['POST'])
 def generate_otp():
     if request.method == 'POST':
@@ -499,7 +498,7 @@ def generate_otp():
                     .otp {{
                         font-size: 20px;
                         font-weight: bold;
-                        padding: 10px;
+                        padding: 10px 40px 10px 10px;
                         border: 1px solid #eeeeee;
                         border-radius: 5px;
                         background-color: #f9f9f9;
@@ -508,10 +507,11 @@ def generate_otp():
                     }}
                     .copy-icon {{
                         position: absolute;
-                        right: 5px;
+                        right: 10px;
                         top: 50%;
                         transform: translateY(-50%);
                         cursor: pointer;
+                        z-index: 1;
                     }}
                     .footer {{
                         font-size: 12px;
@@ -541,8 +541,14 @@ def generate_otp():
                     function copyOTP() {{
                         var otpField = document.getElementById('otp');
                         otpField.select();
-                        document.execCommand('copy');
-                        alert('OTP copied to clipboard');
+                        navigator.clipboard.writeText(otpField.value)
+                            .then(() => {{
+                                alert('OTP copied to clipboard');
+                            }})
+                            .catch(err => {{
+                                console.error('Failed to copy OTP: ', err);
+                                alert('Failed to copy OTP. Please try again.');
+                            }});
                     }}
                 </script>
             </body>
@@ -554,7 +560,6 @@ def generate_otp():
             return jsonify({'status': 'error', 'message': 'User does not exist.'})
     else:
         return jsonify({'status': 'error', 'message': 'Invalid request method.'})
-
 
 # @app.route('/generate_otp', methods=['POST'])
 # def generate_otp():
