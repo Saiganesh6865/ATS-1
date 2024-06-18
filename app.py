@@ -447,21 +447,133 @@ def generate_6otp():
 @app.route('/generate_otp', methods=['POST'])
 def generate_otp():
     if request.method == 'POST':
-        username = request.json.get('username')
-        email = request.json.get('email')
+        data = request.json
+        username = data.get('username')
+        email = data.get('email')
         user = User.query.filter_by(username=username, email=email).first()
         if user:
             otp = generate_6otp()
             user.otp = otp
             db.session.commit()
-            msg = Message('Account Verification', sender='saiganeshkanuparthi@gmail.com', recipients=[email])
-            msg.body = f'Hi {user.name},\n\n OTP for resetting your password {otp}.'
+            msg = Message('New Generated OTP', sender='saiganeshkanuparthi@gmail.com', recipients=[email])
+            msg.html = f'''
+            <!DOCTYPE html>
+            <html lang="en">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <style>
+                    body {{
+                        font-family: Arial, sans-serif;
+                        background-color: #f4f4f4;
+                        color: #333;
+                        margin: 0;
+                        padding: 20px;
+                    }}
+                    .container {{
+                        background-color: #ffffff;
+                        max-width: 600px;
+                        margin: 0 auto;
+                        padding: 20px;
+                        border: 1px solid #dddddd;
+                        border-radius: 8px;
+                        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+                    }}
+                    .header {{
+                        font-size: 24px;
+                        font-weight: bold;
+                        margin-bottom: 20px;
+                        color: #4CAF50;
+                    }}
+                    .content {{
+                        font-size: 16px;
+                        line-height: 1.6;
+                    }}
+                    .otp {{
+                        background-color: #f9f9f9;
+                        padding: 10px;
+                        border: 1px solid #eeeeee;
+                        border-radius: 5px;
+                        margin-top: 10px;
+                        font-size: 20px;
+                        font-weight: bold;
+                        text-align: center;
+                        position: relative;
+                    }}
+                    .copy-button {{
+                        display: inline-block;
+                        margin-top: 10px;
+                        padding: 10px 20px;
+                        font-size: 16px;
+                        color: #fff;
+                        background-color: #4CAF50;
+                        border: none;
+                        border-radius: 5px;
+                        cursor: pointer;
+                        text-decoration: none;
+                    }}
+                    .footer {{
+                        font-size: 12px;
+                        color: #999;
+                        margin-top: 20px;
+                        text-align: center;
+                    }}
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <div class="header">New Generated OTP</div>
+                    <div class="content">
+                        <p>Hi {user.name},</p>
+                        <p>OTP for resetting your password:</p>
+                        <div class="otp" id="otp">{otp}</div>
+                        <button class="copy-button" onclick="copyOTP()">Copy OTP</button>
+                    </div>
+                    <div class="footer">
+                        <p>If you did not request this change, please contact our support team immediately.</p>
+                        <p>&copy; 2024 Your Company. All rights reserved.</p>
+                    </div>
+                </div>
+                <script>
+                    function copyOTP() {{
+                        var otpText = document.getElementById('otp').innerText;
+                        var textArea = document.createElement('textarea');
+                        textArea.value = otpText;
+                        document.body.appendChild(textArea);
+                        textArea.select();
+                        document.execCommand('copy');
+                        document.body.removeChild(textArea);
+                        alert('OTP copied to clipboard');
+                    }}
+                </script>
+            </body>
+            </html>
+            '''
             mail.send(msg)
             return jsonify({'status': 'success', 'message': 'OTP has been sent to your email.'})
         else:
             return jsonify({'status': 'error', 'message': 'User does not exist.'})
     else:
         return jsonify({'status': 'error', 'message': 'Invalid request method.'})
+
+# @app.route('/generate_otp', methods=['POST'])
+# def generate_otp():
+#     if request.method == 'POST':
+#         username = request.json.get('username')
+#         email = request.json.get('email')
+#         user = User.query.filter_by(username=username, email=email).first()
+#         if user:
+#             otp = generate_6otp()
+#             user.otp = otp
+#             db.session.commit()
+#             msg = Message('Account Verification', sender='saiganeshkanuparthi@gmail.com', recipients=[email])
+#             msg.body = f'Hi {user.name},\n\n OTP for resetting your password {otp}.'
+#             mail.send(msg)
+#             return jsonify({'status': 'success', 'message': 'OTP has been sent to your email.'})
+#         else:
+#             return jsonify({'status': 'error', 'message': 'User does not exist.'})
+#     else:
+#         return jsonify({'status': 'error', 'message': 'Invalid request method.'})
     
 
    
@@ -538,7 +650,8 @@ def reset_password():
                         <div class="header">Password Changed</div>
                         <div class="content">
                             <p>Hello {user.name},</p>
-                            <p>Your password has been successfully changed. Here are your updated credentials:</p>
+                            <p>Your password has been successfully changed.</p>
+                            <p>Here are your updated credentials:</p>
                             <div class="credentials">
                                 <p><strong>Username:</strong> {user.username}</p>
                                 <p><strong>Password:</strong> {new_password}</p>
@@ -546,7 +659,7 @@ def reset_password():
                         </div>
                         <div class="footer">
                             <p>If you did not request this change, please contact our support team immediately.</p>
-                            # <p>&copy; 2024 Your Company. All rights reserved.</p>
+                            <p><b>Makonis Talent Track Pro Team</b></p>
                         </div>
                     </div>
                 </body>
@@ -8848,7 +8961,7 @@ def change_password():
             </div>
             <div class="footer">
                 <p>If you did not request this change, please contact our support team immediately.</p>
-                # <p>&copy; 2024 Your Company. All rights reserved.</p>
+                <p><b>Makonis Talent Track Pro Team</b></p>
             </div>
         </div>
     </body>
