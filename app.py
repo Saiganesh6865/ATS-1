@@ -485,24 +485,25 @@ def generate_otp():
                         margin-bottom: 20px;
                         color: #4CAF50;
                     }}
-                    .content {{
+                    .content p {{
                         font-size: 16px;
                         line-height: 1.6;
-                        display: flex;
-                        align-items: center;
+                        margin: 10px 0;
                     }}
                     .otp-label {{
-                        flex: 1;
+                        display: block;
+                        float: left;
+                        width: 200px;
                         text-align: left;
+                        margin-right: 10px;
                     }}
                     .otp-input {{
-                        flex: 2;
-                        width: 100%;
+                        width: calc(100% - 210px);
                         padding: 10px;
+                        background-color: #f9f9f9;
                         border: 1px solid #cccccc;
                         border-radius: 5px;
                         box-sizing: border-box;
-                        margin-left: 10px;
                         font-size: 16px;
                     }}
                     .footer {{
@@ -517,8 +518,9 @@ def generate_otp():
                 <div class="container">
                     <div class="header">New OTP Generated</div>
                     <div class="content">
-                        <div class="otp-label">OTP for resetting your password:</div>
-                        <input type="text" class="otp-input" id="otp" value="{otp}" readonly>
+                        <p>Hi {user.name},</p>
+                        <p><span class="otp-label">OTP for resetting your password:</span></p>
+                        <p><input type="text" class="otp-input" id="otp" value="{otp}" readonly></p>
                     </div>
                     <div class="footer">
                         <p>If you did not request this change, please contact our support team immediately.</p>
@@ -534,6 +536,8 @@ def generate_otp():
             return jsonify({'status': 'error', 'message': 'User does not exist.'})
     else:
         return jsonify({'status': 'error', 'message': 'Invalid request method.'})
+
+
 
 # @app.route('/generate_otp', methods=['POST'])
 # def generate_otp():
