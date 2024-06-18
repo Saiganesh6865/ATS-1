@@ -2153,7 +2153,7 @@ def job_transfered_to_new_recruiter_notification(recruiter_email, new_recruiter_
     mail.send(msg)
 
 
-@app.route('/assign_candidate_new_recruiter', methods=['POST'])
+@app.route('/assign_candidate_new_recuriter', methods=['POST'])
 def assign_candidate_to_a_new_recruiter():
     data = request.json
 
