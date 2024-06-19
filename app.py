@@ -5950,7 +5950,7 @@ def post_job():
     except ValueError as e:
         return jsonify({'status': 'error', 'message': f'Invalid data type for job details: {e}'}), 400
     except Exception as e:
-        print(e)
+        print("job gettnng error", e)
         return jsonify({'status': 'error', 'message': f'Failed to post job: {str(e)}'}), 500
 
     jd_pdf = data.get('jd_pdf')
@@ -6016,7 +6016,7 @@ def post_job():
         return jsonify({'status': 'success', 'message': 'Job posted successfully', 'job_post_id': job_post_id}), 200
     except Exception as e:
         db.session.rollback()
-        print(e)
+        print("final exception ", e)
         return jsonify({'status': 'error', 'message': f'Failed to post job: {str(e)}'}), 500
 
 
