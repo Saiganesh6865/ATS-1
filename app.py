@@ -5719,7 +5719,6 @@ def download_resume(candidate_id):
 #     msg.body = 'A new job has been posted. Check your dashboard for more details.'
 #     mail.send(msg)
 
-
 def post_job_send_notification(recruiter_email, new_recruiter_name, job_data):
     html_body = f"""
     <html>
@@ -5806,8 +5805,7 @@ def post_job_send_notification(recruiter_email, new_recruiter_name, job_data):
     """
 
     msg = Message(
-        # 'New Job Notification',
-        f'New Requirement Assigned',
+        'New Requirement Assigned',
         sender='kanuparthisaiganesh582@gmail.com',
         recipients=[recruiter_email]
     )
@@ -5815,8 +5813,108 @@ def post_job_send_notification(recruiter_email, new_recruiter_name, job_data):
     try:
         mail.send(msg)
     except Exception as e:
-        print("mail error",str(e))
-        return jsonify({'status': 'error', 'message': f'Failed to send mail: {str(e)}'}),500
+        print("mail error", str(e))
+        return f'Failed to send mail: {str(e)}'
+    return None
+
+
+# def post_job_send_notification(recruiter_email, new_recruiter_name, job_data):
+#     html_body = f"""
+#     <html>
+#     <head>
+#         <style>
+#             body {{
+#                 font-family: Arial, sans-serif;
+#                 color: #333;
+#                 line-height: 1.6;
+#                 background-color: #f4f4f4;
+#                 margin: 0;
+#                 padding: 0;
+#             }}
+#             .container {{
+#                 padding: 20px;
+#                 margin: 20px auto;
+#                 max-width: 600px;
+#                 background-color: #ffffff;
+#                 border: 1px solid #ddd;
+#                 border-radius: 8px;
+#                 box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+#             }}
+#             .header {{
+#                 background-color: #4CAF50;
+#                 color: white;
+#                 padding: 10px;
+#                 text-align: center;
+#                 font-size: 20px;
+#                 border-radius: 8px 8px 0 0;
+#             }}
+#             table {{
+#                 border-collapse: collapse;
+#                 width: 100%;
+#                 margin-top: 10px;
+#             }}
+#             th, td {{
+#                 border: 1px solid #ddd;
+#                 padding: 8px;
+#                 text-align: left;
+#             }}
+#             th {{
+#                 background-color: #4CAF50;
+#                 color: white;
+#             }}
+#             tr:nth-child(even) {{
+#                 background-color: #f9f9f9;
+#             }}
+#             p {{
+#                 margin: 10px 0;
+#             }}
+#             .footer {{
+#                 margin-top: 20px;
+#                 font-size: 12px;
+#                 color: #777;
+#                 text-align: center;
+#                 border-top: 1px solid #ddd;
+#                 padding-top: 10px;
+#             }}
+#         </style>
+#     </head>
+#     <body>
+#         <div class="container">
+#             <div class="header">
+#                 New Job Posted
+#             </div>
+#             <p>Dear {new_recruiter_name},</p>
+#             <p>A new requirement has been assigned to you.</p>
+#             <p> Please find the details below:</p>
+#             <table>
+#                 <tr>
+#                     <th style="width: 20%;">Job ID</th>
+#                     <th style="width: 30%;">Client</th>
+#                     <th style="width: 30%;">Role/Profile</th>
+#                     <th style="width: 30%;">Location</th>
+#                 </tr>
+#                 {job_data}
+#             </table>
+#             <p>Please check in Job Listing page for more details.</p>
+#             <p>Regards,</p>
+#             <p><b>Makonis Talent Track Pro Team</b></p>
+#         </div>
+#     </body>
+#     </html>
+#     """
+
+#     msg = Message(
+#         # 'New Job Notification',
+#         f'New Requirement Assigned',
+#         sender='kanuparthisaiganesh582@gmail.com',
+#         recipients=[recruiter_email]
+#     )
+#     msg.html = html_body
+#     try:
+#         mail.send(msg)
+#     except Exception as e:
+#         print("mail error",str(e))
+#         return jsonify({'status': 'error', 'message': f'Failed to send mail: {str(e)}'}),500
 
 
 # def post_job_send_notification(recruiter_email, new_recruiter_name, job_data):
@@ -5911,7 +6009,6 @@ def post_job_send_notification(recruiter_email, new_recruiter_name, job_data):
 #     msg.html = html_body
 #     mail.send(msg)
 
-
 @app.route('/post_job', methods=['POST'])
 def post_job():
     data = request.json
@@ -5950,7 +6047,7 @@ def post_job():
     except ValueError as e:
         return jsonify({'status': 'error', 'message': f'Invalid data type for job details: {e}'}), 400
     except Exception as e:
-        print("job gettnng error", e)
+        print(e)
         return jsonify({'status': 'error', 'message': f'Failed to post job: {str(e)}'}), 500
 
     jd_pdf = data.get('jd_pdf')
@@ -6011,13 +6108,123 @@ def post_job():
         for recruiter_name in data.get('recruiter', []):
             recruiter = User.query.filter_by(username=recruiter_name.strip()).first()
             if recruiter:
-                post_job_send_notification(recruiter.email, recruiter.username, job_data)
+                error_msg = post_job_send_notification(recruiter.email, recruiter.username, job_data)
+                if error_msg:
+                    return jsonify({'status': 'error', 'message': error_msg}), 500
 
         return jsonify({'status': 'success', 'message': 'Job posted successfully', 'job_post_id': job_post_id}), 200
     except Exception as e:
         db.session.rollback()
-        print("final exception ", e)
+        print(e)
         return jsonify({'status': 'error', 'message': f'Failed to post job: {str(e)}'}), 500
+
+
+# @app.route('/post_job', methods=['POST'])
+# def post_job():
+#     data = request.json
+    
+#     user_id = data.get('user_id')
+#     if not user_id:
+#         return jsonify({'status': 'error', 'message': 'user_id is required'}), 400
+
+#     user = User.query.filter_by(id=user_id).first()
+#     if not user:
+#         return jsonify({'status': 'error', 'message': 'User not found'}), 404
+
+#     if user.user_type != 'management':
+#         return jsonify({'status': 'error', 'message': 'You do not have permission to post a job'}), 401
+
+#     try:
+#         job_details = {
+#             'client': data['client'],
+#             'experience_min': data['experience_min'],
+#             'experience_max': data['experience_max'],
+#             'budget_min': f"{data['currency_type_min']} {data['budget_min']}",
+#             'budget_max': f"{data['currency_type_max']} {data['budget_max']}",
+#             'location': data['location'],
+#             'shift_timings': data['shift_timings'],
+#             'notice_period': data['notice_period'],
+#             'role': data['role'],
+#             'detailed_jd': data['detailed_jd'],
+#             'mode': data['mode'],
+#             'job_status': data['job_status'],
+#             'skills': data['skills'],
+#             'job_type': data['Job_Type'],
+#             'contract_in_months': data['Job_Type_details'] if data['Job_Type'] == 'Contract' else None
+#         }
+#     except KeyError as e:
+#         return jsonify({'status': 'error', 'message': f'Missing required field: {e}'}), 400
+#     except ValueError as e:
+#         return jsonify({'status': 'error', 'message': f'Invalid data type for job details: {e}'}), 400
+#     except Exception as e:
+#         print("job gettnng error", e)
+#         return jsonify({'status': 'error', 'message': f'Failed to post job: {str(e)}'}), 500
+
+#     jd_pdf = data.get('jd_pdf')
+#     jd_binary = None
+#     jd_pdf_present = False
+
+#     if jd_pdf:
+#         try:
+#             jd_binary = base64.b64decode(jd_pdf)
+#             jd_pdf_present = bool(jd_binary)
+#         except Exception:
+#             return jsonify({'status': 'error', 'message': 'Error decoding base64 PDF file'}), 400
+
+#     new_job_post = JobPost(
+#         client=job_details['client'],
+#         experience_min=job_details['experience_min'],
+#         experience_max=job_details['experience_max'],
+#         budget_min=job_details['budget_min'],
+#         budget_max=job_details['budget_max'],
+#         location=job_details['location'],
+#         shift_timings=job_details['shift_timings'],
+#         notice_period=job_details['notice_period'],
+#         role=job_details['role'],
+#         detailed_jd=job_details['detailed_jd'],
+#         recruiter=', '.join(data.get('recruiter', [])),
+#         management=user.username,
+#         mode=job_details['mode'],
+#         job_status=job_details['job_status'],
+#         job_type=job_details['job_type'],
+#         skills=job_details['skills'],
+#         contract_in_months=job_details['contract_in_months'],
+#         jd_pdf=jd_binary,
+#         jd_pdf_present=jd_pdf_present
+#     )
+
+#     try:
+#         current_datetime = datetime.now(pytz.timezone('Asia/Kolkata'))
+#         new_job_post.date_created = current_datetime.date()
+#         new_job_post.time_created = current_datetime.time()
+
+#         db.session.add(new_job_post)
+#         db.session.commit()
+
+#         job_post_id = new_job_post.id
+
+#         for recruiter_name in data.get('recruiter', []):
+#             notification = Notification(
+#                 job_post_id=job_post_id,
+#                 recruiter_name=recruiter_name.strip(),
+#                 notification_status=False
+#             )
+#             db.session.add(notification)
+
+#         db.session.commit()
+
+#         job_data = f"<tr><td>{job_post_id}</td><td>{new_job_post.client}</td><td>{new_job_post.role}</td><td>{new_job_post.location}</td></tr>"
+#         print('recruiter', data.get('recruiter', []))
+#         for recruiter_name in data.get('recruiter', []):
+#             recruiter = User.query.filter_by(username=recruiter_name.strip()).first()
+#             if recruiter:
+#                 post_job_send_notification(recruiter.email, recruiter.username, job_data)
+
+#         return jsonify({'status': 'success', 'message': 'Job posted successfully', 'job_post_id': job_post_id}), 200
+#     except Exception as e:
+#         db.session.rollback()
+#         print("final exception ", e)
+#         return jsonify({'status': 'error', 'message': f'Failed to post job: {str(e)}'}), 500
 
 
 # @app.route('/post_job', methods=['POST'])
