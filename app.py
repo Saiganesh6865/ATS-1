@@ -5926,8 +5926,8 @@ def post_job():
     try:
         job_details = {
             'client': data['client'],
-            'experience_min': int(data['experience_min']),
-            'experience_max': int(data['experience_max']),
+            'experience_min': data['experience_min'],
+            'experience_max': data['experience_max'],
             'budget_min': f"{data['currency_type_min']} {data['budget_min']}",
             'budget_max': f"{data['currency_type_max']} {data['budget_max']}",
             'location': data['location'],
