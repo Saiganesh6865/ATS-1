@@ -5817,7 +5817,6 @@ def post_job_send_notification(recruiter_email, new_recruiter_name, job_data):
         return f'Failed to send mail: {str(e)}'
     return None
 
-
 # def post_job_send_notification(recruiter_email, new_recruiter_name, job_data):
 #     html_body = f"""
 #     <html>
@@ -6012,7 +6011,7 @@ def post_job_send_notification(recruiter_email, new_recruiter_name, job_data):
 @app.route('/post_job', methods=['POST'])
 def post_job():
     data = request.json
-    
+
     user_id = data.get('user_id')
     if not user_id:
         return jsonify({'status': 'error', 'message': 'user_id is required'}), 400
@@ -6044,11 +6043,6 @@ def post_job():
         }
     except KeyError as e:
         return jsonify({'status': 'error', 'message': f'Missing required field: {e}'}), 400
-    except ValueError as e:
-        return jsonify({'status': 'error', 'message': f'Invalid data type for job details: {e}'}), 400
-    except Exception as e:
-        print(e)
-        return jsonify({'status': 'error', 'message': f'Failed to post job: {str(e)}'}), 500
 
     jd_pdf = data.get('jd_pdf')
     jd_binary = None
@@ -6104,7 +6098,7 @@ def post_job():
         db.session.commit()
 
         job_data = f"<tr><td>{job_post_id}</td><td>{new_job_post.client}</td><td>{new_job_post.role}</td><td>{new_job_post.location}</td></tr>"
-        print('recruiter', data.get('recruiter', []))
+        
         for recruiter_name in data.get('recruiter', []):
             recruiter = User.query.filter_by(username=recruiter_name.strip()).first()
             if recruiter:
@@ -6117,7 +6111,6 @@ def post_job():
         db.session.rollback()
         print(e)
         return jsonify({'status': 'error', 'message': f'Failed to post job: {str(e)}'}), 500
-
 
 # @app.route('/post_job', methods=['POST'])
 # def post_job():
