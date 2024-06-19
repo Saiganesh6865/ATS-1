@@ -5918,14 +5918,14 @@ def post_job():
     
     user_id = data.get('user_id')
     if not user_id:
-        return jsonify({'status': 'error', 'message': 'user_id is required'}), 500
+        return jsonify({'status': 'error', 'message': 'user_id is required'}), 400
 
     user = User.query.filter_by(id=user_id).first()
     if not user:
-        return jsonify({'status': 'error', 'message': 'User not found'}), 500
+        return jsonify({'status': 'error', 'message': 'User not found'}), 404
 
     if user.user_type != 'management':
-        return jsonify({'status': 'error', 'message': 'You do not have permission to post a job'}), 500
+        return jsonify({'status': 'error', 'message': 'You do not have permission to post a job'}), 401
 
     try:
         job_details = {
@@ -5946,12 +5946,12 @@ def post_job():
             'contract_in_months': data['Job_Type_details'] if data['Job_Type'] == 'Contract' else None
         }
     except KeyError as e:
-        return jsonify({'status': 'error', 'message': f'Missing required field: {e}'}),500
+        return jsonify({'status': 'error', 'message': f'Missing required field: {e}'}), 400
     except ValueError as e:
-        return jsonify({'status': 'error', 'message': f'Invalid data type for job details: {e}'}),500
+        return jsonify({'status': 'error', 'message': f'Invalid data type for job details: {e}'}), 400
     except Exception as e:
         print(e)
-        return jsonify({'status': 'error', 'message': f'Failed to post job: {str(e)}'}),500
+        return jsonify({'status': 'error', 'message': f'Failed to post job: {str(e)}'}), 500
 
     jd_pdf = data.get('jd_pdf')
     jd_binary = None
@@ -5962,7 +5962,7 @@ def post_job():
             jd_binary = base64.b64decode(jd_pdf)
             jd_pdf_present = bool(jd_binary)
         except Exception:
-            return jsonify({'status': 'error', 'message': 'Error decoding base64 PDF file'}), 500
+            return jsonify({'status': 'error', 'message': 'Error decoding base64 PDF file'}), 400
 
     new_job_post = JobPost(
         client=job_details['client'],
@@ -6007,12 +6007,10 @@ def post_job():
         db.session.commit()
 
         job_data = f"<tr><td>{job_post_id}</td><td>{new_job_post.client}</td><td>{new_job_post.role}</td><td>{new_job_post.location}</td></tr>"
-        print('reecruier',  data.get('recruiter', []))
+        print('recruiter', data.get('recruiter', []))
         for recruiter_name in data.get('recruiter', []):
             recruiter = User.query.filter_by(username=recruiter_name.strip()).first()
-            print('recruiter 1', recruiter.username)
             if recruiter:
-                print('recruiter 2', recruiter.username)
                 post_job_send_notification(recruiter.email, recruiter.username, job_data)
 
         return jsonify({'status': 'success', 'message': 'Job posted successfully', 'job_post_id': job_post_id}), 200
@@ -6020,6 +6018,116 @@ def post_job():
         db.session.rollback()
         print(e)
         return jsonify({'status': 'error', 'message': f'Failed to post job: {str(e)}'}), 500
+
+
+# @app.route('/post_job', methods=['POST'])
+# def post_job():
+#     data = request.json
+    
+#     user_id = data.get('user_id')
+#     if not user_id:
+#         return jsonify({'status': 'error', 'message': 'user_id is required'}), 500
+
+#     user = User.query.filter_by(id=user_id).first()
+#     if not user:
+#         return jsonify({'status': 'error', 'message': 'User not found'}), 500
+
+#     if user.user_type != 'management':
+#         return jsonify({'status': 'error', 'message': 'You do not have permission to post a job'}), 500
+
+#     try:
+#         job_details = {
+#             'client': data['client'],
+#             'experience_min': data['experience_min'],
+#             'experience_max': data['experience_max'],
+#             'budget_min': f"{data['currency_type_min']} {data['budget_min']}",
+#             'budget_max': f"{data['currency_type_max']} {data['budget_max']}",
+#             'location': data['location'],
+#             'shift_timings': data['shift_timings'],
+#             'notice_period': data['notice_period'],
+#             'role': data['role'],
+#             'detailed_jd': data['detailed_jd'],
+#             'mode': data['mode'],
+#             'job_status': data['job_status'],
+#             'skills': data['skills'],
+#             'job_type': data['Job_Type'],
+#             'contract_in_months': data['Job_Type_details'] if data['Job_Type'] == 'Contract' else None
+#         }
+#     except KeyError as e:
+#         return jsonify({'status': 'error', 'message': f'Missing required field: {e}'}),500
+#     except ValueError as e:
+#         return jsonify({'status': 'error', 'message': f'Invalid data type for job details: {e}'}),500
+#     except Exception as e:
+#         print(e)
+#         return jsonify({'status': 'error', 'message': f'Failed to post job: {str(e)}'}),500
+
+#     jd_pdf = data.get('jd_pdf')
+#     jd_binary = None
+#     jd_pdf_present = False
+
+#     if jd_pdf:
+#         try:
+#             jd_binary = base64.b64decode(jd_pdf)
+#             jd_pdf_present = bool(jd_binary)
+#         except Exception:
+#             return jsonify({'status': 'error', 'message': 'Error decoding base64 PDF file'}), 500
+
+#     new_job_post = JobPost(
+#         client=job_details['client'],
+#         experience_min=job_details['experience_min'],
+#         experience_max=job_details['experience_max'],
+#         budget_min=job_details['budget_min'],
+#         budget_max=job_details['budget_max'],
+#         location=job_details['location'],
+#         shift_timings=job_details['shift_timings'],
+#         notice_period=job_details['notice_period'],
+#         role=job_details['role'],
+#         detailed_jd=job_details['detailed_jd'],
+#         recruiter=', '.join(data.get('recruiter', [])),
+#         management=user.username,
+#         mode=job_details['mode'],
+#         job_status=job_details['job_status'],
+#         job_type=job_details['job_type'],
+#         skills=job_details['skills'],
+#         contract_in_months=job_details['contract_in_months'],
+#         jd_pdf=jd_binary,
+#         jd_pdf_present=jd_pdf_present
+#     )
+
+#     try:
+#         current_datetime = datetime.now(pytz.timezone('Asia/Kolkata'))
+#         new_job_post.date_created = current_datetime.date()
+#         new_job_post.time_created = current_datetime.time()
+
+#         db.session.add(new_job_post)
+#         db.session.commit()
+
+#         job_post_id = new_job_post.id
+
+#         for recruiter_name in data.get('recruiter', []):
+#             notification = Notification(
+#                 job_post_id=job_post_id,
+#                 recruiter_name=recruiter_name.strip(),
+#                 notification_status=False
+#             )
+#             db.session.add(notification)
+
+#         db.session.commit()
+
+#         job_data = f"<tr><td>{job_post_id}</td><td>{new_job_post.client}</td><td>{new_job_post.role}</td><td>{new_job_post.location}</td></tr>"
+#         print('reecruier',  data.get('recruiter', []))
+#         for recruiter_name in data.get('recruiter', []):
+#             recruiter = User.query.filter_by(username=recruiter_name.strip()).first()
+#             print('recruiter 1', recruiter.username)
+#             if recruiter:
+#                 print('recruiter 2', recruiter.username)
+#                 post_job_send_notification(recruiter.email, recruiter.username, job_data)
+
+#         return jsonify({'status': 'success', 'message': 'Job posted successfully', 'job_post_id': job_post_id}), 200
+#     except Exception as e:
+#         db.session.rollback()
+#         print(e)
+#         return jsonify({'status': 'error', 'message': f'Failed to post job: {str(e)}'}), 500
 
 
 # @app.route('/post_job', methods=['POST'])
