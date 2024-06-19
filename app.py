@@ -6009,6 +6009,7 @@ def post_job():
         return jsonify({'status': 'success', 'message': 'Job posted successfully', 'job_post_id': job_post_id}), 200
     except Exception as e:
         db.session.rollback()
+        print(e)
         return jsonify({'status': 'error', 'message': f'Failed to post job: {str(e)}'}), 500
 
 
