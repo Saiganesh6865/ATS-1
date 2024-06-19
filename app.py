@@ -5812,7 +5812,11 @@ def post_job_send_notification(recruiter_email, new_recruiter_name, job_data):
         recipients=[recruiter_email]
     )
     msg.html = html_body
-    mail.send(msg)
+    try:
+        mail.send(msg)
+    except Exception as e:
+        print("mail error",str(e))
+        return jsonify({'status': 'error', 'message': f'Failed to send mail: {str(e)}'}),500
 
 
 # def post_job_send_notification(recruiter_email, new_recruiter_name, job_data):
@@ -6003,11 +6007,12 @@ def post_job():
         db.session.commit()
 
         job_data = f"<tr><td>{job_post_id}</td><td>{new_job_post.client}</td><td>{new_job_post.role}</td><td>{new_job_post.location}</td></tr>"
-
+        print('reecruier',  data.get('recruiter', []))
         for recruiter_name in data.get('recruiter', []):
             recruiter = User.query.filter_by(username=recruiter_name.strip()).first()
-            print('recruiter', recruiter)
+            print('recruiter 1', recruiter.username)
             if recruiter:
+                print('recruiter 2', recruiter.username)
                 post_job_send_notification(recruiter.email, recruiter.username, job_data)
 
         return jsonify({'status': 'success', 'message': 'Job posted successfully', 'job_post_id': job_post_id}), 200
