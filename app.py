@@ -6099,14 +6099,9 @@ def post_job():
             recruiter = User.query.filter_by(username=recruiter_name.strip()).first()
             if recruiter:
                 if is_valid_email(recruiter.email):
-                    if "gmail.com" in recruiter.email or "googlemail.com" in recruiter.email:
-                        # Send Gmail notification
-                        send_gmail_notification(recruiter.email, recruiter.username, job_data)
-                    else:
-                        # Send regular email notification
-                        error_msg = post_job_send_notification(recruiter.email, recruiter.username, job_data)
-                        if error_msg:
-                            return jsonify({'status': 'error', 'message': error_msg}), 500
+                    error_msg = post_job_send_notification(recruiter.email, recruiter.username, job_details)
+                    if error_msg:
+                        return jsonify({'status': 'error', 'message': error_msg}), 500
                 else:
                     invalid_emails.append(recruiter.email)
 
