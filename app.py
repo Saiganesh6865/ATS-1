@@ -5914,14 +5914,14 @@ def post_job():
     
     user_id = data.get('user_id')
     if not user_id:
-        return jsonify({'status': 'error', 'message': 'user_id is required'}), 400
+        return jsonify({'status': 'error', 'message': 'user_id is required'}), 500
 
     user = User.query.filter_by(id=user_id).first()
     if not user:
-        return jsonify({'status': 'error', 'message': 'User not found'}), 400
+        return jsonify({'status': 'error', 'message': 'User not found'}), 500
 
     if user.user_type != 'management':
-        return jsonify({'status': 'error', 'message': 'You do not have permission to post a job'}), 400
+        return jsonify({'status': 'error', 'message': 'You do not have permission to post a job'}), 500
 
     try:
         job_details = {
@@ -5942,9 +5942,12 @@ def post_job():
             'contract_in_months': data['Job_Type_details'] if data['Job_Type'] == 'Contract' else None
         }
     except KeyError as e:
-        return jsonify({'status': 'error', 'message': f'Missing required field: {e}'}), 400
+        return jsonify({'status': 'error', 'message': f'Missing required field: {e}'}),500
     except ValueError as e:
-        return jsonify({'status': 'error', 'message': f'Invalid data type for job details: {e}'}), 400
+        return jsonify({'status': 'error', 'message': f'Invalid data type for job details: {e}'}),500
+    except Exception as e:
+        print(e)
+        return jsonify({'status': 'error', 'message': f'Failed to post job: {str(e)}'}),500
 
     jd_pdf = data.get('jd_pdf')
     jd_binary = None
@@ -5955,7 +5958,7 @@ def post_job():
             jd_binary = base64.b64decode(jd_pdf)
             jd_pdf_present = bool(jd_binary)
         except Exception:
-            return jsonify({'status': 'error', 'message': 'Error decoding base64 PDF file'}), 400
+            return jsonify({'status': 'error', 'message': 'Error decoding base64 PDF file'}), 500
 
     new_job_post = JobPost(
         client=job_details['client'],
@@ -6003,6 +6006,7 @@ def post_job():
 
         for recruiter_name in data.get('recruiter', []):
             recruiter = User.query.filter_by(username=recruiter_name.strip()).first()
+            print('recruiter', recruiter)
             if recruiter:
                 post_job_send_notification(recruiter.email, recruiter.username, job_data)
 
