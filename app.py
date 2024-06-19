@@ -6000,10 +6000,8 @@ def post_job():
 
         return jsonify({'status': 'success', 'message': 'Job posted successfully', 'job_post_id': job_post_id}), 200
 
-    except KeyError as e:
-        return jsonify({"status": "error", "message": f"KeyError: {e}"}), 400
-
     except Exception as e:
+        print(e)
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
