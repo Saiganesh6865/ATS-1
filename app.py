@@ -258,8 +258,10 @@ class JobPost(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     client = db.Column(db.String(100))
-    experience_min = db.Column(db.Integer)
-    experience_max = db.Column(db.Integer)
+    # experience_min = db.Column(db.Integer)
+    # experience_max = db.Column(db.Integer)
+    experience_min = db.Column(db.String(100))
+    experience_max = db.Column(db.String(100))
     budget_min = db.Column(db.String(300))
     budget_max = db.Column(db.String(300))
     location = db.Column(db.String(100))
