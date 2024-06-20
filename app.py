@@ -10401,12 +10401,12 @@ def send_edit_notifications():
             if email:
                 job_updated_send_notification(recruiter_email=email, new_recruiter_name=recruiter_name, job_data=job_data, job_id=job_post.id)
 
-        for recruiter_name in removed_recruiter_usernames:
+        for recruiter_name in removed_recruiters:
             email = all_recruiter_emails.get(recruiter_name)
             if email:
                 job_removed_send_notification(recruiter_email=email, new_recruiter_name=recruiter_name, job_data=job_data, job_id=job_post.id)
 
-        for recruiter_name in added_recruiter_usernames:
+        for recruiter_name in added_recruiters:
             email = all_recruiter_emails.get(recruiter_name)
             if email:
                 post_job_send_notification(recruiter_email=email, new_recruiter_name=recruiter_name, job_data=job_data)
