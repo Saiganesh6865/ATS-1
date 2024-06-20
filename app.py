@@ -51,9 +51,9 @@ app.config['MAIL_PORT'] = 587
 app.config['MAIL_USE_TLS'] = True
 # app.config['MAIL_USERNAME'] = 'ganesh.s@makonissoft.com'
 # app.config['MAIL_PASSWORD'] = 'Fol98135'
-app.config['MAIL_USERNAME'] = 'saiganeshkanuparthi@gmail.com'
+app.config['MAIL_USERNAME'] = 'kanuparthisaiganesh582@gmail.com'
 # app.config['MAIL_PASSWORD'] = 'Ganesh@2022'
-app.config['MAIL_PASSWORD'] = 'ungeazzlutbzkwaa'
+app.config['MAIL_PASSWORD'] = 'cdxfkuefixpigwae'
 mail = Mail(app)
 
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get("DATABASE_URL")
@@ -457,7 +457,7 @@ def generate_otp():
             otp = generate_6otp()
             user.otp = otp
             db.session.commit()
-            msg = Message('New OTP Generated', sender='saiganeshkanuparthi@gmail.com', recipients=[email])
+            msg = Message('New OTP Generated', sender='kanuparthisaiganesh582@gmail.com', recipients=[email])
             msg.html = f'''
             <!DOCTYPE html>
             <html lang="en">
@@ -552,7 +552,7 @@ def generate_otp():
 #             otp = generate_6otp()
 #             user.otp = otp
 #             db.session.commit()
-#             msg = Message('New OTP Notification', sender='saiganeshkanuparthi@gmail.com', recipients=[email])
+#             msg = Message('New OTP Notification', sender='kanuparthisaiganesh582@gmail.com', recipients=[email])
 #             msg.html = f'''
 #             <!DOCTYPE html>
 #             <html lang="en">
@@ -645,7 +645,7 @@ def generate_otp():
 #             otp = generate_6otp()
 #             user.otp = otp
 #             db.session.commit()
-#             msg = Message('Account Verification', sender='saiganeshkanuparthi@gmail.com', recipients=[email])
+#             msg = Message('Account Verification', sender='kanuparthisaiganesh582@gmail.com', recipients=[email])
 #             msg.body = f'Hi {user.name},\n\n OTP for resetting your password {otp}.'
 #             mail.send(msg)
 #             return jsonify({'status': 'success', 'message': 'OTP has been sent to your email.'})
@@ -770,7 +770,7 @@ def reset_password():
 #                 user.password = new_password_hashed
 #                 db.session.commit()
 #                 # Send the updated password to the user's email
-#                 msg = Message('Password Changed', sender='saiganeshkanuparthi@gmail.com', recipients=[user.email])
+#                 msg = Message('Password Changed', sender='kanuparthisaiganesh582@gmail.com', recipients=[user.email])
 #                 msg.body = f'Hello {user.name},\n\nYour password has been successfully changed. Here are your updated credentials:\n\nUsername: {user.username}\nPassword: {new_password}'
 #                 mail.send(msg)
 
@@ -923,7 +923,7 @@ def signup():
         verification_link = url_for('verify', token=verification_token, _external=True)
 
         # Send the verification email
-        msg = Message('Account Verification', sender='saiganeshkanuparthi@gmail.com', recipients=[new_user.email])
+        msg = Message('Account Verification', sender='kanuparthisaiganesh582@gmail.com', recipients=[new_user.email])
         
         msg.html = f'''
         <html>
@@ -1051,7 +1051,7 @@ def signup():
 #         verification_link = url_for('verify', token=verification_token, _external=True)
 
 #         # Send the verification email
-#         msg = Message('Account Verification', sender='saiganeshkanuparthi@gmail.com', recipients=[new_user.email])
+#         msg = Message('Account Verification', sender='kanuparthisaiganesh582@gmail.com', recipients=[new_user.email])
 #         msg.body = f'Hello {new_user.name},\n\n We are pleased to inform you that your account has been successfully created for the ATS Makonis Talent Track Pro. Here are your login credentials:\n\nUsername: {new_user.username}\nPassword: {password}\n\n Please note that the verification link will expire after 24 hours. \n\n After successfully verifying your account, you can access the application using the following link : \n\n Application Link (Post Verification): https://ats-makonis.netlify.app/ \n\n To verify your account, please click on the following link: {verification_link} \n\n If you have any questions or need assistance, please feel free to reach out. \n\n Best regards, '
 #         mail.send(msg)
 
@@ -1096,7 +1096,7 @@ def signup_onetime():
     verification_link = url_for('verify', token=verification_token, _external=True)
 
     # Send the verification email
-    msg = Message('Account Verification', sender='saiganeshkanuparthi@gmail.com', recipients=[new_user.email])
+    msg = Message('Account Verification', sender='kanuparthisaiganesh582@gmail.com', recipients=[new_user.email])
     
     msg.html = f'''
     <html>
@@ -1228,7 +1228,7 @@ def signup_onetime():
 #         message_body = f'Hello {new_user.name},\n\nWe are pleased to inform you that your account has been successfully created for the ATS Makonis Talent Track Pro.\n\nYour login credentials:\n\nUsername: {new_user.username}\nPassword: {password}\n\nTo complete the account setup, kindly click on the verification link below:\n{verification_link}\n\nPlease note that the verification link will expire after 24 hours.\n\nAfter successfully verifying your account, you can access the application using the following link:\n\nApplication Link (Post Verification): https://ats-makonis.netlify.app/\n\nIf you have any questions or need assistance, please feel free to reach out.\n\nBest regards,'
 
 #         # Send the verification email
-#         msg = Message('Account Verification', sender='saiganeshkanuparthi@gmail.com', recipients=[new_user.email])
+#         msg = Message('Account Verification', sender='kanuparthisaiganesh582@gmail.com', recipients=[new_user.email])
 #         msg.body = message_body
 #         mail.send(msg)
 
@@ -1537,7 +1537,7 @@ def assign_candidates_notification(recruiter_email, new_recruiter_name, candidat
 
     msg = Message(
         'Candidate Assignment Notification',
-        sender='saiganeshkanuparthi@gmail.com',
+        sender='kanuparthisaiganesh582@gmail.com',
         recipients=[recruiter_email]
     )
     msg.html = html_body
@@ -1639,7 +1639,7 @@ def assign_candidates_notification(recruiter_email, new_recruiter_name, candidat
     # msg = Message(
     #     # 'Candidate Assignment Notification',
     #     f'Candidate Data Transferred',
-    #     sender='saiganeshkanuparthi@gmail.com',
+    #     sender='kanuparthisaiganesh582@gmail.com',
     #     recipients=[recruiter_email]
     # )
     # msg.html = html_body
@@ -5016,7 +5016,7 @@ def update_candidate_careers(candidate_id, page_no):
                     user_email = User.query.get(session.get('user_id')).email
 
                     message = Message(f'Job Application Status - {candidate_position}',
-                                      sender='saiganeshkanuparthi@gmail.com', recipients=[candidate_email])
+                                      sender='kanuparthisaiganesh582@gmail.com', recipients=[candidate_email])
 
                     if user_type == 'management':
                         management_email = user_email
@@ -5055,7 +5055,7 @@ Thanks,
                     user_email = User.query.get(session.get('user_id')).email
 
                     message = Message(f'Job Application Status - {candidate_position}',
-                                      sender='saiganeshkanuparthi@gmail.com', recipients=[candidate_email])
+                                      sender='kanuparthisaiganesh582@gmail.com', recipients=[candidate_email])
 
                     if user_type == 'management':
                         management_email = user_email
@@ -5715,7 +5715,7 @@ def download_resume(candidate_id):
 
 
 # def send_notification(recruiter_email):
-#     msg = Message('New Job Posted', sender='saiganeshkanuparthi@gmail.com', recipients=[recruiter_email])
+#     msg = Message('New Job Posted', sender='kanuparthisaiganesh582@gmail.com', recipients=[recruiter_email])
 #     msg.body = 'A new job has been posted. Check your dashboard for more details.'
 #     mail.send(msg)
 
@@ -9533,7 +9533,7 @@ def change_password():
 #     user.password = hashed_new_password
 #     db.session.commit()
 
-#     msg = Message('Password Changed', sender='saiganeshkanuparthi@gmail.com', recipients=[user.email])
+#     msg = Message('Password Changed', sender='kanuparthisaiganesh582@gmail.com', recipients=[user.email])
 #     msg.body = f'Hello {user.username},\n\nYour password has been successfully changed. Here are your updated credentials:\n\nUsername: {user.username}\nPassword: {new_password}'
 #     mail.send(msg)
 
@@ -10048,7 +10048,7 @@ def job_removed_send_notification(recruiter_email, new_recruiter_name, job_data,
 
     msg = Message(
         f'Job Removal Notification: Job ID {job_id}',
-        sender='saiganeshkanuparthi@gmail.com',
+        sender='kanuparthisaiganesh582@gmail.com',
         recipients=[recruiter_email]
     )
     msg.html = html_body
@@ -10143,7 +10143,7 @@ def job_updated_send_notification(recruiter_email, new_recruiter_name, job_data,
 
     msg = Message(
         f'Job Update Notification: Job ID {job_id}',
-        sender='saiganeshkanuparthi@gmail.com',
+        sender='kanuparthisaiganesh582@gmail.com',
         recipients=[recruiter_email]
     )
     msg.html = html_body
@@ -11311,7 +11311,7 @@ def send_email():
     email_content = f"Click the link below to view active job posts: <a href='{page_link}'>{page_link}</a>"
 
     # Create an email message
-    message = Message('Active Job Posts', sender='saiganeshkanuparthi@gmail.com', recipients=[recipient_email])
+    message = Message('Active Job Posts', sender='kanuparthisaiganesh582@gmail.com', recipients=[recipient_email])
     message.html = email_content
 
     # Send the email
@@ -11517,7 +11517,7 @@ def apply_careers():
             db.session.commit()
 
             try:
-                msg = Message('Successful Submission of Your Job Application', sender='saiganeshkanuparthi@gmail.com', recipients=[email])
+                msg = Message('Successful Submission of Your Job Application', sender='kanuparthisaiganesh582@gmail.com', recipients=[email])
                 msg.body = f"Dear { name },\n Congratulations! Your job application has been successfully submitted for the position at {client} for the role of {profile}. We appreciate your interest in joining our team.\n\n  Our dedicated recruiter will review your application, and you can expect to hear from us within the next 24 hours.\n\nBest wishes for your application process!\n\n Regards, \n\nTeam\nMakonis Talent Track Pro\nrecruiterpro@makonissoft.com\n"
                 mail.send(msg)
             except Exception as e:
@@ -11699,7 +11699,7 @@ def website_candidate_assign():
 
 #new
 def send_career_email(to, subject, message):
-    msg = Message(subject, sender='saiganeshkanuparthi@gmail.com', recipients=[to])
+    msg = Message(subject, sender='kanuparthisaiganesh582@gmail.com', recipients=[to])
     msg.body = message
     mail.send(msg)
 
