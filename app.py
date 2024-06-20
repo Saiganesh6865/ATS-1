@@ -45,15 +45,15 @@ import string
 
 app = Flask(__name__)
 cors = CORS(app)
-# app.config['MAIL_SERVER'] = 'smtp.gmail.com'
-app.config['MAIL_SERVER'] = 'smtp.office365.com'
+app.config['MAIL_SERVER'] = 'smtp.gmail.com'
+# app.config['MAIL_SERVER'] = 'smtp.office365.com'
 app.config['MAIL_PORT'] = 587
 app.config['MAIL_USE_TLS'] = True
 # app.config['MAIL_USERNAME'] = 'pavan.k@makonissoft.com'
 # app.config['MAIL_PASSWORD'] = 'Roh64272'
-app.config['MAIL_USERNAME'] = 'ganesh.s@makonissoft.com'
-app.config['MAIL_PASSWORD'] = 'Fol98135'
-# app.config['MAIL_USERNAME'] = 'kanuparthisaiganesh582@gmail.com'
+# app.config['MAIL_USERNAME'] = 'ganesh.s@makonissoft.com'
+# app.config['MAIL_PASSWORD'] = 'Fol98135'
+app.config['MAIL_USERNAME'] = 'kanuparthisaiganesh582@gmail.com'
 # app.config['MAIL_PASSWORD'] = 'Ganesh@2022'
 app.config['MAIL_PASSWORD'] = 'cdxfkuefixpigwae'
 mail = Mail(app)
@@ -5808,7 +5808,7 @@ def post_job_send_notification(recruiter_email, new_recruiter_name, job_data):
 
     msg = Message(
         'New Requirement Assigned',
-        sender='ganesh.s@makonissoft.com',
+        sender='kanuparthisaiganesh582@gmail.com',
         recipients=[recruiter_email]
     )
     msg.html = html_body
@@ -10053,7 +10053,7 @@ def job_removed_send_notification(recruiter_email, new_recruiter_name, job_data,
 
     msg = Message(
         f'Job Removal Notification: Job ID {job_id}',
-        sender='ganesh.s@makonissoft.com',
+        sender='kanuparthisaiganesh582@gmail.com',
         recipients=[recruiter_email]
     )
     msg.html = html_body
@@ -10148,7 +10148,7 @@ def job_updated_send_notification(recruiter_email, new_recruiter_name, job_data,
 
     msg = Message(
         f'Job Update Notification: Job ID {job_id}',
-        sender='ganesh.s@makonissoft.com',
+        sender='kanuparthisaiganesh582@gmail.com',
         recipients=[recruiter_email]
     )
     msg.html = html_body
