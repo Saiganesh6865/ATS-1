@@ -10371,10 +10371,8 @@ def send_edit_notifications():
     try:
         data = request.json
         job_post_id = data.get('job_post_id')
-        # old_recruiter_usernames = set(data.get('old_recruiter_usernames', []))
-        # new_recruiter_usernames = set(data.get('new_recruiter_usernames', []))
-        old_recruiter_usernames = data.get('old_recruiter_usernames', [])
-        new_recruiter_usernames = data.get('new_recruiter_usernames', [])
+        old_recruiter_usernames = set(data.get('old_recruiter_usernames', []))
+        new_recruiter_usernames = set(data.get('new_recruiter_usernames', []))
 
         if not job_post_id:
             return jsonify({'status': 'error', 'message': 'job_post_id is required'}), 400
@@ -10385,12 +10383,12 @@ def send_edit_notifications():
 
         job_data = f"<tr><td>{job_post.id}</td><td>{job_post.client}</td><td>{job_post.role}</td><td>{job_post.location}</td></tr>"
 
-        unchanged_recruiters = old_recruiter_usernames & new_recruiter_usernames
-        removed_recruiters = old_recruiter_usernames - new_recruiter_usernames
-        added_recruiters = new_recruiter_usernames - old_recruiter_usernames
+        unchanged_recruiters = set(old_recruiter_usernames) & set(new_recruiter_usernames)
+        removed_recruiters = set(old_recruiter_usernames) - set(new_recruiter_usernames)
+        added_recruiters = set(new_recruiter_usernames) - set(old_recruiter_usernames)
 
         all_recruiters = User.query.filter(
-            User.username.in_(new_recruiter_usernames.union(old_recruiter_usernames)),
+            User.username.in_(set(new_recruiter_usernames).union(set(old_recruiter_usernames))),
             User.user_type == 'recruiter',
             User.is_active == True,
             User.is_verified == True
@@ -10403,12 +10401,12 @@ def send_edit_notifications():
             if email:
                 job_updated_send_notification(recruiter_email=email, new_recruiter_name=recruiter_name, job_data=job_data, job_id=job_post.id)
 
-        for recruiter_name in removed_recruiters:
+        for recruiter_name in removed_recruiter_usernames:
             email = all_recruiter_emails.get(recruiter_name)
             if email:
                 job_removed_send_notification(recruiter_email=email, new_recruiter_name=recruiter_name, job_data=job_data, job_id=job_post.id)
 
-        for recruiter_name in added_recruiters:
+        for recruiter_name in added_recruiter_usernames:
             email = all_recruiter_emails.get(recruiter_name)
             if email:
                 post_job_send_notification(recruiter_email=email, new_recruiter_name=recruiter_name, job_data=job_data)
@@ -10416,6 +10414,7 @@ def send_edit_notifications():
         return jsonify({'status': 'success', 'message': 'Notifications sent successfully'}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+        
 
 # @app.route('/edit_job_post/<int:job_post_id>', methods=['POST'])
 # def edit_job_post(job_post_id):
