@@ -6016,7 +6016,7 @@ def is_valid_email(email):
     """ Validate email format using regex. """
     regex = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
     return re.match(regex, email) is not None
-    
+
 @app.route('/post_job', methods=['POST'])
 def post_job():
     data = request.json
@@ -6095,30 +6095,153 @@ def post_job():
         db.session.commit()
 
         job_post_id = new_job_post.id
-        job_data = f"<tr><td>{job_post_id}</td><td>{new_job_post.client}</td><td>{new_job_post.role}</td><td>{new_job_post.location}</td></tr>"
-        
-        invalid_emails = []
-        for recruiter_name in data.get('recruiter', []):
-            recruiter = User.query.filter_by(username=recruiter_name.strip()).first()
-            if recruiter:
-                if is_valid_email(recruiter.email):
-                    error_msg = post_job_send_notification(recruiter.email, recruiter.username, job_data)
-                    # pass
-                    if error_msg:
-                        return jsonify({'status': 'error', 'message': error_msg}), 500
-                        # pass
-                else:
-                    invalid_emails.append(recruiter.email)
-
-        if invalid_emails:
-            print("Invalid Emails:", invalid_emails)  # Print invalid_emails list
-            return jsonify({'status': 'error', 'message': f'Invalid email format for: {", ".join(invalid_emails)}'}), 400
 
         return jsonify({'status': 'success', 'message': 'Job posted successfully', 'job_post_id': job_post_id}), 200
     except Exception as e:
         db.session.rollback()
         print(e)
         return jsonify({'status': 'error', 'message': f'Failed to post job: {str(e)}'}), 500
+
+@app.route('/send_notifications', methods=['POST'])
+def send_notifications():
+    data = request.json
+    job_post_id = data.get('job_post_id')
+
+    if not job_post_id:
+        return jsonify({'status': 'error', 'message': 'job_post_id is required'}), 400
+
+    job_post = JobPost.query.filter_by(id=job_post_id).first()
+    if not job_post:
+        return jsonify({'status': 'error', 'message': 'Job post not found'}), 404
+
+    job_data = f"<tr><td>{job_post.id}</td><td>{job_post.client}</td><td>{job_post.role}</td><td>{job_post.location}</td></tr>"
+
+    invalid_emails = []
+    for recruiter_name in job_post.recruiter.split(','):
+        recruiter = User.query.filter_by(username=recruiter_name.strip()).first()
+        if recruiter:
+            if is_valid_email(recruiter.email):
+                error_msg = post_job_send_notification(recruiter.email, recruiter.username, job_data)
+                if error_msg:
+                    return jsonify({'status': 'error', 'message': error_msg}), 500
+            else:
+                invalid_emails.append(recruiter.email)
+
+    if invalid_emails:
+        print("Invalid Emails:", invalid_emails)  # Print invalid_emails list
+        return jsonify({'status': 'error', 'message': f'Invalid email format for: {", ".join(invalid_emails)}'}), 400
+
+    return jsonify({'status': 'success', 'message': 'Notifications sent successfully'}), 200
+
+
+
+# def is_valid_email(email):
+#     """ Validate email format using regex. """
+#     regex = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+#     return re.match(regex, email) is not None
+    
+# @app.route('/post_job', methods=['POST'])
+# def post_job():
+#     data = request.json
+
+#     user_id = data.get('user_id')
+#     if not user_id:
+#         return jsonify({'status': 'error', 'message': 'user_id is required'}), 400
+
+#     user = User.query.filter_by(id=user_id).first()
+#     if not user:
+#         return jsonify({'status': 'error', 'message': 'User not found'}), 404
+
+#     if user.user_type != 'management':
+#         return jsonify({'status': 'error', 'message': 'You do not have permission to post a job'}), 401
+
+#     try:
+#         job_details = {
+#             'client': data['client'],
+#             'experience_min': data['experience_min'],
+#             'experience_max': data['experience_max'],
+#             'budget_min': f"{data['currency_type_min']} {data['budget_min']}",
+#             'budget_max': f"{data['currency_type_max']} {data['budget_max']}",
+#             'location': data['location'],
+#             'shift_timings': data['shift_timings'],
+#             'notice_period': data['notice_period'],
+#             'role': data['role'],
+#             'detailed_jd': data['detailed_jd'],
+#             'mode': data['mode'],
+#             'job_status': data['job_status'],
+#             'skills': data['skills'],
+#             'job_type': data['Job_Type'],
+#             'contract_in_months': data['Job_Type_details'] if data['Job_Type'] == 'Contract' else None
+#         }
+#     except KeyError as e:
+#         return jsonify({'status': 'error', 'message': f'Missing required field: {e}'}), 400
+
+#     jd_pdf = data.get('jd_pdf')
+#     jd_binary = None
+#     jd_pdf_present = False
+
+#     if jd_pdf:
+#         try:
+#             jd_binary = base64.b64decode(jd_pdf)
+#             jd_pdf_present = bool(jd_binary)
+#         except Exception:
+#             return jsonify({'status': 'error', 'message': 'Error decoding base64 PDF file'}), 400
+
+#     new_job_post = JobPost(
+#         client=job_details['client'],
+#         experience_min=job_details['experience_min'],
+#         experience_max=job_details['experience_max'],
+#         budget_min=job_details['budget_min'],
+#         budget_max=job_details['budget_max'],
+#         location=job_details['location'],
+#         shift_timings=job_details['shift_timings'],
+#         notice_period=job_details['notice_period'],
+#         role=job_details['role'],
+#         detailed_jd=job_details['detailed_jd'],
+#         recruiter=', '.join(data.get('recruiter', [])),
+#         management=user.username,
+#         mode=job_details['mode'],
+#         job_status=job_details['job_status'],
+#         job_type=job_details['job_type'],
+#         skills=job_details['skills'],
+#         contract_in_months=job_details['contract_in_months'],
+#         jd_pdf=jd_binary,
+#         jd_pdf_present=jd_pdf_present
+#     )
+
+#     try:
+#         current_datetime = datetime.now(pytz.timezone('Asia/Kolkata'))
+#         new_job_post.date_created = current_datetime.date()
+#         new_job_post.time_created = current_datetime.time()
+
+#         db.session.add(new_job_post)
+#         db.session.commit()
+
+#         job_post_id = new_job_post.id
+#         job_data = f"<tr><td>{job_post_id}</td><td>{new_job_post.client}</td><td>{new_job_post.role}</td><td>{new_job_post.location}</td></tr>"
+        
+#         invalid_emails = []
+#         for recruiter_name in data.get('recruiter', []):
+#             recruiter = User.query.filter_by(username=recruiter_name.strip()).first()
+#             if recruiter:
+#                 if is_valid_email(recruiter.email):
+#                     error_msg = post_job_send_notification(recruiter.email, recruiter.username, job_data)
+#                     # pass
+#                     if error_msg:
+#                         return jsonify({'status': 'error', 'message': error_msg}), 500
+#                         # pass
+#                 else:
+#                     invalid_emails.append(recruiter.email)
+
+#         if invalid_emails:
+#             print("Invalid Emails:", invalid_emails)  # Print invalid_emails list
+#             return jsonify({'status': 'error', 'message': f'Invalid email format for: {", ".join(invalid_emails)}'}), 400
+
+#         return jsonify({'status': 'success', 'message': 'Job posted successfully', 'job_post_id': job_post_id}), 200
+#     except Exception as e:
+#         db.session.rollback()
+#         print(e)
+#         return jsonify({'status': 'error', 'message': f'Failed to post job: {str(e)}'}), 500
 
 
 # @app.route('/post_job', methods=['POST'])
