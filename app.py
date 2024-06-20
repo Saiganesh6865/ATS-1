@@ -10200,8 +10200,6 @@ def edit_job_post(job_post_id):
                         jd_binary = base64.b64decode(jd_pdf)
                         job_post.jd_pdf = jd_binary
                         job_post.jd_pdf_present = True
-                    else:
-                        job_post.jd_pdf_present = False
 
                     # Update job post in the database
                     db.session.commit()
