@@ -6093,13 +6093,14 @@ def post_job():
         db.session.commit()
 
         job_post_id = new_job_post.id
-
+        job_data = f"<tr><td>{job_post_id}</td><td>{new_job_post.client}</td><td>{new_job_post.role}</td><td>{new_job_post.location}</td></tr>"
+        
         invalid_emails = []
         for recruiter_name in data.get('recruiter', []):
             recruiter = User.query.filter_by(username=recruiter_name.strip()).first()
             if recruiter:
                 if is_valid_email(recruiter.email):
-                    error_msg = post_job_send_notification(recruiter.email, recruiter.username, job_details)
+                    error_msg = post_job_send_notification(recruiter.email, recruiter.username, job_data)
                     if error_msg:
                         return jsonify({'status': 'error', 'message': error_msg}), 500
                 else:
