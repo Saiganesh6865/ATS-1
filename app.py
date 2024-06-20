@@ -6102,9 +6102,9 @@ def post_job():
                 if is_valid_email(recruiter.email):
                     # error_msg = post_job_send_notification(recruiter.email, recruiter.username, job_data)
                     pass
-                    if error_msg:
+                    # if error_msg:
                         # return jsonify({'status': 'error', 'message': error_msg}), 500
-                        pass
+                        # pass
                 else:
                     invalid_emails.append(recruiter.email)
 
