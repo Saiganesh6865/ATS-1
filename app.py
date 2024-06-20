@@ -45,10 +45,12 @@ import string
 
 app = Flask(__name__)
 cors = CORS(app)
-app.config['MAIL_SERVER'] = 'smtp.gmail.com'
-# app.config['MAIL_SERVER'] = 'smtp.office365.com'
+# app.config['MAIL_SERVER'] = 'smtp.gmail.com'
+app.config['MAIL_SERVER'] = 'smtp.office365.com'
 app.config['MAIL_PORT'] = 587
 app.config['MAIL_USE_TLS'] = True
+app.config['MAIL_USERNAME'] = 'pavan.k@makonissoft.com'
+app.config['MAIL_PASSWORD'] = 'Roh64272'
 # app.config['MAIL_USERNAME'] = 'ganesh.s@makonissoft.com'
 # app.config['MAIL_PASSWORD'] = 'Fol98135'
 app.config['MAIL_USERNAME'] = 'kanuparthisaiganesh582@gmail.com'
@@ -5806,7 +5808,7 @@ def post_job_send_notification(recruiter_email, new_recruiter_name, job_data):
 
     msg = Message(
         'New Requirement Assigned',
-        sender='kanuparthisaiganesh582@gmail.com',
+        sender='pavan.k@makonissoft.com',
         recipients=[recruiter_email]
     )
     msg.html = html_body
@@ -6100,10 +6102,10 @@ def post_job():
             recruiter = User.query.filter_by(username=recruiter_name.strip()).first()
             if recruiter:
                 if is_valid_email(recruiter.email):
-                    # error_msg = post_job_send_notification(recruiter.email, recruiter.username, job_data)
-                    pass
-                    # if error_msg:
-                        # return jsonify({'status': 'error', 'message': error_msg}), 500
+                    error_msg = post_job_send_notification(recruiter.email, recruiter.username, job_data)
+                    # pass
+                    if error_msg:
+                        return jsonify({'status': 'error', 'message': error_msg}), 500
                         # pass
                 else:
                     invalid_emails.append(recruiter.email)
@@ -10051,7 +10053,7 @@ def job_removed_send_notification(recruiter_email, new_recruiter_name, job_data,
 
     msg = Message(
         f'Job Removal Notification: Job ID {job_id}',
-        sender='kanuparthisaiganesh582@gmail.com',
+        sender='pavan.k@makonissoft.com',
         recipients=[recruiter_email]
     )
     msg.html = html_body
@@ -10146,7 +10148,7 @@ def job_updated_send_notification(recruiter_email, new_recruiter_name, job_data,
 
     msg = Message(
         f'Job Update Notification: Job ID {job_id}',
-        sender='kanuparthisaiganesh582@gmail.com',
+        sender='pavan.k@makonissoft.com',
         recipients=[recruiter_email]
     )
     msg.html = html_body
