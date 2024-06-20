@@ -6103,7 +6103,8 @@ def post_job():
                     # error_msg = post_job_send_notification(recruiter.email, recruiter.username, job_data)
                     pass
                     if error_msg:
-                        return jsonify({'status': 'error', 'message': error_msg}), 500
+                        # return jsonify({'status': 'error', 'message': error_msg}), 500
+                        pass
                 else:
                     invalid_emails.append(recruiter.email)
 
