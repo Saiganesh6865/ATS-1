@@ -857,7 +857,7 @@ def verify(token):
                 message = 'Your Management Account has been Successfully Verified. Please Login!'
                 return generate_html_message(message, redirect_url='https://ats-makonis.netlify.app/ManagementLogin')
             elif user.user_type == 'recruiter':
-                message = 'Your Recruiter Account has been Successfully Verified!'
+                message = 'Your Recruiter Account has been Successfully Verified. Please Login!'
                 return generate_html_message(message, redirect_url='https://ats-makonis.netlify.app/RecruitmentLogin')
     else:
         message = 'Your verification link has expired. Please contact management to activate your account.'
