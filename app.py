@@ -4231,6 +4231,7 @@ def add_candidate():
                 buyout=buyout,
                 package_in_lpa=highest_package_lpa,
                 total=total_offers,
+                reason_for_job_change=reason_for_job_change,
                 resume_present=resume_present
                 # buyout='buyout' in data
             )
