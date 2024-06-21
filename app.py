@@ -5233,6 +5233,7 @@ def edit_candidate(candidate_id):
 
         # Holding offer logic
         holding_offer = data.get('holding_offer')
+        candidate.holding_offer = holding_offer
         if holding_offer == 'yes':
             total_offers = data.get('total_offers')
             candidate.total = 0 if total_offers == '' else total_offers
