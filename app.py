@@ -843,17 +843,43 @@ def verify(token):
     user_id = verify_token(token)
     if user_id:
         user = User.query.get(user_id)
-        user.is_verified = True
-        db.session.commit()
-        if user.user_type == 'management':
-            message = 'Your Management Account has been Successfully Verified. Please Login!'
-            return generate_html_message(message, redirect_url='https://ats-makonis.netlify.app/ManagementLogin')
-        elif user.user_type == 'recruiter':
-            message = 'Your Recruiter Account has been Successfully Verified!'
-            return generate_html_message(message, redirect_url='https://ats-makonis.netlify.app/RecruitmentLogin')
+        if user.is_verified:
+            if user.user_type == 'management':
+                message = 'Your Management Account is already Verified. Please Login!'
+                return generate_html_message(message, redirect_url='https://ats-makonis.netlify.app/ManagementLogin')
+            elif user.user_type == 'recruiter':
+                message = 'Your Recruiter Account is already Verified. Please Login!'
+                return generate_html_message(message, redirect_url='https://ats-makonis.netlify.app/RecruitmentLogin')
+        else:
+            user.is_verified = True
+            db.session.commit()
+            if user.user_type == 'management':
+                message = 'Your Management Account has been Successfully Verified. Please Login!'
+                return generate_html_message(message, redirect_url='https://ats-makonis.netlify.app/ManagementLogin')
+            elif user.user_type == 'recruiter':
+                message = 'Your Recruiter Account has been Successfully Verified!'
+                return generate_html_message(message, redirect_url='https://ats-makonis.netlify.app/RecruitmentLogin')
     else:
         message = 'Your verification link has expired. Please contact management to activate your account.'
         return generate_html_message(message)
+
+
+# @app.route('/verify/<token>')
+# def verify(token):
+#     user_id = verify_token(token)
+#     if user_id:
+#         user = User.query.get(user_id)
+#         user.is_verified = True
+#         db.session.commit()
+#         if user.user_type == 'management':
+#             message = 'Your Management Account has been Successfully Verified. Please Login!'
+#             return generate_html_message(message, redirect_url='https://ats-makonis.netlify.app/ManagementLogin')
+#         elif user.user_type == 'recruiter':
+#             message = 'Your Recruiter Account has been Successfully Verified!'
+#             return generate_html_message(message, redirect_url='https://ats-makonis.netlify.app/RecruitmentLogin')
+#     else:
+#         message = 'Your verification link has expired. Please contact management to activate your account.'
+#         return generate_html_message(message)
 
 
 # @app.route('/verify/<token>')
@@ -5208,7 +5234,8 @@ def edit_candidate(candidate_id):
         # candidate.holding_offer = data.get('holding_offer')
         candidate.total = data.get('total_offers')
         candidate.package_in_lpa = data.get('highest_package')
-
+        
+        
         # Handle resume decoding
         resume_data = data.get('resume')
         if resume_data is not None:
@@ -5253,7 +5280,7 @@ def edit_candidate(candidate_id):
 
     except Exception as e:
         print(e)
-        return jsonify({'status': 'error', "message": "Candidate Details not Edited Successfully"})
+        return jsonify({'status': 'error', "message": "Candidate Details not Edited "})
 
 
 # @app.route('/edit_candidate/<int:candidate_id>', methods=['POST'])
