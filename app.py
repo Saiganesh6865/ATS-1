@@ -10171,23 +10171,26 @@ def generate_excel():
         'message': 'Data analysis completed successfully'
     })
 
-def get_submission_counts(query, from_date, to_date, interval):
-    """
-    Helper function to get submission counts grouped by specified interval.
-    """
+def get_submission_counts(candidates_query, from_date, to_date, interval):
     if interval == 'daily':
-        date_part = func.TO_CHAR(func.DATE(query.date_created), 'YYYY-MM-DD')
+        date_part = func.TO_CHAR(func.DATE(Candidate.date_created), 'YYYY-MM-DD')
+        group_by = func.DATE(Candidate.date_created)
     elif interval == 'weekly':
-        date_part = func.TO_CHAR(func.DATE(query.date_created), 'IYYY-IW')
+        date_part = func.TO_CHAR(func.DATE(Candidate.date_created), 'IYYY-IW')
+        group_by = func.TO_CHAR(func.DATE(Candidate.date_created), 'IYYY-IW')
     elif interval == 'monthly':
-        date_part = func.TO_CHAR(func.DATE(query.date_created), 'YYYY-MM')
+        date_part = func.TO_CHAR(func.DATE(Candidate.date_created), 'YYYY-MM')
+        group_by = func.TO_CHAR(func.DATE(Candidate.date_created), 'YYYY-MM')
     elif interval == 'yearly':
-        date_part = func.TO_CHAR(func.DATE(query.date_created), 'YYYY')
+        date_part = func.TO_CHAR(func.DATE(Candidate.date_created), 'YYYY')
+        group_by = func.TO_CHAR(func.DATE(Candidate.date_created), 'YYYY')
+    else:
+        return []
 
-    grouped_query = query.filter(
-        query.date_created >= from_date,
-        query.date_created <= to_date
-    ).group_by(date_part).with_entities(
+    grouped_query = candidates_query.filter(
+        Candidate.date_created >= from_date,
+        Candidate.date_created <= to_date
+    ).group_by(group_by).with_entities(
         date_part.label('date_part'),
         func.count().label('count')
     )
