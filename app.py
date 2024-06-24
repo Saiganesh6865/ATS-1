@@ -10238,7 +10238,7 @@ def get_job_type_closure_rates(query, recruiter_username, from_date, to_date):
         Candidate.recruiter == recruiter_username,
         Candidate.date_created >= from_date,
         Candidate.date_created <= to_date,
-        Candidate.status == SELECTED  # Only onboarded candidates
+        Candidate.status == 'SELECTED'  # Only onboarded candidates
     ).group_by(
         JobPost.job_type
     ).all()
@@ -10282,7 +10282,7 @@ def get_historical_performance(query, from_date, to_date):
     """
     Helper function to get historical performance.
     """
-    historical_performance = query.filter(Candidate.status == SELECTED).group_by(func.date_format(Candidate.date_created, "%Y-%m")).with_entities(func.date_format(Candidate.date_created, "%Y-%m"), func.avg(func.DATE_PART('day', Candidate.last_working_date - Candidate.date_created))).all()
+    historical_performance = query.filter(Candidate.status == 'SELECTED').group_by(func.date_format(Candidate.date_created, "%Y-%m")).with_entities(func.date_format(Candidate.date_created, "%Y-%m"), func.avg(func.DATE_PART('day', Candidate.last_working_date - Candidate.date_created))).all()
 
     # Create a dictionary with date as key and average time to close as value
     historical_performance_dict = {date.strftime('%Y-%m'): avg_time for date, avg_time in historical_performance}
@@ -10350,6 +10350,10 @@ def generate_excel():
     # Creating a pivot table for the report
     pivot_table = data_df.pivot_table(index='recruiter', columns='date_created', values='count', aggfunc='sum',
                                       fill_value=0, margins=True, margins_name='Grand Total')
+
+    # Reordering columns to match from_date to to_date
+    date_columns = pd.date_range(from_date, to_date, freq='D').strftime('%d-%m-%Y')
+    pivot_table = pivot_table[date_columns]
 
     # Convert pivot table to JSON for response
     styled_pivot_table_json = pivot_table.to_json()
