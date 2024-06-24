@@ -10133,7 +10133,7 @@ def analyze_recruitment():
             role_industry_location_analysis = get_role_industry_location_analysis(candidates_query, recruiter_username, from_date, to_date)
 
             # 6. Time-to-Close Analysis
-            time_to_close = get_time_to_close(candidates_query)
+            # time_to_close = get_time_to_close(candidates_query)
 
             # 7. Historical Performance Analysis
             historical_performance = get_historical_performance(candidates_query, from_date, to_date)
@@ -10148,7 +10148,7 @@ def analyze_recruitment():
                 'client_closure_rates': client_closure_rates,
                 'job_type_closure_rates': job_type_closure_rates,
                 'role_industry_location_analysis': role_industry_location_analysis,
-                'time_to_close': time_to_close,
+                # 'time_to_close': time_to_close,
                 'historical_performance': historical_performance,
                 'candidate_count': recruiter_candidate_count
             }
@@ -10163,7 +10163,7 @@ def analyze_recruitment():
                 'client_closure_rates': [],
                 'job_type_closure_rates': [],
                 'role_industry_location_analysis': [],
-                'time_to_close': [],
+                # 'time_to_close': [],
                 'historical_performance': [],
                 'candidate_count': 0
             }
@@ -10267,16 +10267,16 @@ def get_role_industry_location_analysis(query, recruiter_username, from_date, to
 
     return role_industry_location_analysis
 
-def get_time_to_close(query):
-    """
-    Helper function to calculate average time to close.
-    """
-    time_to_close = query.filter(Candidate.status == 'SELECTED').group_by(Candidate.client).with_entities(
-        Candidate.client,
-        func.avg(func.DATE_PART('day', Candidate.last_working_date - Candidate.date_created)).label('avg_time_to_close')
-    ).all()
+# def get_time_to_close(query):
+#     """
+#     Helper function to calculate average time to close.
+#     """
+#     time_to_close = query.filter(Candidate.status == 'SELECTED').group_by(Candidate.client).with_entities(
+#         Candidate.client,
+#         func.avg(func.DATE_PART('day', Candidate.last_working_date - Candidate.date_created)).label('avg_time_to_close')
+#     ).all()
 
-    return time_to_close
+#     return time_to_close
 
 def get_historical_performance(query, from_date, to_date):
     """
