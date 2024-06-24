@@ -10287,9 +10287,9 @@ def generate_excel():
     user_id = data.get('user_id')
     from_date_str = data.get('from_date')
     to_date_str = data.get('to_date')
-    recruiter_names = data.get('recruiter_names', [])
+    recruiter_usernames = data.get('recruiter_usernames', [])
 
-    if not recruiter_names:
+    if not recruiter_usernames:
         return jsonify({'error': 'Please select any Recruiter'})
 
     try:
@@ -10298,31 +10298,29 @@ def generate_excel():
     except ValueError:
         return jsonify({'error': 'Invalid date format. Please use DD-MM-YYYY format.'})
 
-    # Generate all recruiter-date combinations within the specified range
-    all_recruiter_date_combinations = list(itertools.product(recruiter_names, pd.date_range(from_date, to_date, freq='D')))
-
-    # Open a session and fetch data
+    # Example querying candidates (replace with actual SQLAlchemy queries)
     session = Session()
+    
+    # Generate all recruiter-date combinations within the specified range
+    all_recruiter_date_combinations = list(itertools.product(recruiter_usernames, pd.date_range(from_date, to_date, freq='D')))
 
     # Fetch all candidates within the specified date range
     candidates_query = session.query(Candidate.recruiter, Candidate.date_created, func.count(Candidate.id).label('count')).filter(
-        Candidate.recruiter.in_(recruiter_names),
-        Candidate.date_created >= from_date.strftime("%Y-%m-%d"),
-        Candidate.date_created <= to_date.strftime("%Y-%m-%d")
+        Candidate.recruiter.in_(recruiter_usernames),
+        Candidate.date_created >= from_date,
+        Candidate.date_created <= to_date
     ).group_by(Candidate.recruiter, Candidate.date_created).all()
 
-    session.close()
-
     # Convert candidate data to a dictionary for easy lookup
-    candidate_data_dict = {(row.recruiter, row.date_created.strftime("%Y-%m-%d")): row.count for row in candidates_query}
+    candidate_data_dict = {(row.recruiter, row.date_created.strftime("%d-%m-%Y")): row.count for row in candidates_query}
 
     # Prepare data for the report
     data = []
     for recruiter, date in all_recruiter_date_combinations:
-        count = candidate_data_dict.get((recruiter, date.strftime("%Y-%m-%d")), 0)
+        count = candidate_data_dict.get((recruiter, date.strftime("%d-%m-%Y")), 0)
         data.append({
             "recruiter": recruiter,
-            "date_created": date.strftime("%Y-%m-%d"),
+            "date_created": date.strftime("%d-%m-%Y"),
             "count": count
         })
 
