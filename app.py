@@ -10344,7 +10344,7 @@ def get_historical_performance(query, from_date, to_date):
     ).with_entities(
         func.to_char(Candidate.date_created, 'YYYY-MM').label('date_interval'),
         func.count().label('total_candidates'),
-        func.sum(case([(Candidate.status == 'SELECTED', 1)], else_=0)).label('closed_candidates'),
+        func.sum(case((Candidate.status == 'SELECTED', 1), else_=0)).label('closed_candidates'),
         func.avg(func.extract('day', Candidate.last_working_date - Candidate.date_created)).label('avg_time_to_close')
     ).group_by(
         func.to_char(Candidate.date_created, 'YYYY-MM')
@@ -10381,6 +10381,7 @@ def get_historical_performance(query, from_date, to_date):
         })
     
     return performance_data
+
 
 # @app.route('/analyze_recruitment', methods=['POST'])
 # def analyze_recruitment():
