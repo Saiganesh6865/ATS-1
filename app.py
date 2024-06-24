@@ -10087,10 +10087,10 @@ def analyze_recruitment():
     try:
         from_date_str = data.get('from_date')
         to_date_str = data.get('to_date')
-        from_date = datetime.strptime(from_date_str, "%Y-%m-%d")
-        to_date = datetime.strptime(to_date_str, "%Y-%m-%d")
+        from_date = datetime.strptime(from_date_str, "%d-%m-%Y")
+        to_date = datetime.strptime(to_date_str, "%d-%m-%Y")
     except ValueError:
-        return jsonify({'error': 'Invalid date format. Please use YYYY-MM-DD format.'})
+        return jsonify({'status': 'error', 'message': 'Invalid date format. Please use DD-MM-YYYY format.'})
 
     # Initialize recruiter_data dictionary to store results for each recruiter
     recruiter_data = {}
@@ -10127,39 +10127,10 @@ def analyze_recruitment():
             client_closure_rates = get_client_closure_rates(candidates_query)
 
             # 4. Job Type Analysis - Query job type closure rates
-            job_type_closure_rates = db.session.query(
-                JobPost.job_type,
-                func.count().label('count')
-            ).join(
-                Candidate,
-                Candidate.job_id == JobPost.id
-            ).filter(
-                Candidate.recruiter == recruiter_username,
-                Candidate.date_created >= from_date,
-                Candidate.date_created <= to_date,
-                Candidate.onboarded == True  # Only onboarded candidates
-            ).group_by(
-                JobPost.job_type
-            ).all()
+            job_type_closure_rates = get_job_type_closure_rates(candidates_query, recruiter_username, from_date, to_date)
 
             # 5. Role, Industry, and Location Analysis
-            role_industry_location_analysis = db.session.query(
-                JobPost.role,
-                # JobPost.industry,
-                JobPost.location,
-                func.count().label('count')
-            ).join(
-                Candidate,
-                Candidate.job_id == JobPost.id
-            ).filter(
-                Candidate.recruiter == recruiter_username,
-                Candidate.date_created >= from_date,
-                Candidate.date_created <= to_date
-            ).group_by(
-                JobPost.role,
-                # JobPost.industry,
-                JobPost.location
-            ).all()
+            role_industry_location_analysis = get_role_industry_location_analysis(candidates_query, recruiter_username, from_date, to_date)
 
             # 6. Time-to-Close Analysis
             time_to_close = get_time_to_close(candidates_query)
@@ -10198,6 +10169,7 @@ def analyze_recruitment():
             }
 
     return jsonify({
+        'status': 'success', 
         'recruiter_data': recruiter_data,
         'from_date_str': from_date_str,
         'to_date_str': to_date_str,
@@ -10252,18 +10224,65 @@ def get_client_closure_rates(query):
     client_closure_rates = query.filter(Candidate.onboarded == True).group_by(Candidate.client).with_entities(Candidate.client, func.count()).all()
     return client_closure_rates
 
+def get_job_type_closure_rates(query, recruiter_username, from_date, to_date):
+    """
+    Helper function to get job type closure rates for a recruiter.
+    """
+    job_type_closure_rates = db.session.query(
+        JobPost.job_type,
+        func.count().label('count')
+    ).join(
+        Candidate,
+        Candidate.job_id == JobPost.id
+    ).filter(
+        Candidate.recruiter == recruiter_username,
+        Candidate.date_created >= from_date,
+        Candidate.date_created <= to_date,
+        Candidate.status == SELECTED  # Only onboarded candidates
+    ).group_by(
+        JobPost.job_type
+    ).all()
+
+    return job_type_closure_rates
+
+def get_role_industry_location_analysis(query, recruiter_username, from_date, to_date):
+    """
+    Helper function to get role, industry, and location analysis for a recruiter.
+    """
+    role_industry_location_analysis = db.session.query(
+        JobPost.role,
+        JobPost.location,
+        func.count().label('count')
+    ).join(
+        Candidate,
+        Candidate.job_id == JobPost.id
+    ).filter(
+        Candidate.recruiter == recruiter_username,
+        Candidate.date_created >= from_date,
+        Candidate.date_created <= to_date
+    ).group_by(
+        JobPost.role,
+        JobPost.location
+    ).all()
+
+    return role_industry_location_analysis
+
 def get_time_to_close(query):
     """
     Helper function to calculate average time to close.
     """
-    time_to_close = query.filter(Candidate.onboarded == True).group_by(Candidate.client).with_entities(Candidate.client, func.avg(func.datediff(Candidate.last_working_date, Candidate.date_created))).all()
+    time_to_close = query.filter(Candidate.status == SELECTED).group_by(Candidate.client).with_entities(
+        Candidate.client,
+        func.avg(func.DATE_PART('day', Candidate.last_working_date - Candidate.date_created)).label('avg_time_to_close')
+    ).all()
+
     return time_to_close
 
 def get_historical_performance(query, from_date, to_date):
     """
     Helper function to get historical performance.
     """
-    historical_performance = query.filter(Candidate.onboarded == True).group_by(func.date_format(Candidate.date_created, "%Y-%m")).with_entities(func.date_format(Candidate.date_created, "%Y-%m"), func.avg(func.datediff(Candidate.last_working_date, Candidate.date_created))).all()
+    historical_performance = query.filter(Candidate.status == SELECTED).group_by(func.date_format(Candidate.date_created, "%Y-%m")).with_entities(func.date_format(Candidate.date_created, "%Y-%m"), func.avg(func.DATE_PART('day', Candidate.last_working_date - Candidate.date_created))).all()
 
     # Create a dictionary with date as key and average time to close as value
     historical_performance_dict = {date.strftime('%Y-%m'): avg_time for date, avg_time in historical_performance}
@@ -10301,6 +10320,9 @@ def generate_excel():
     
     # Generate all recruiter-date combinations within the specified range
     all_recruiter_date_combinations = list(itertools.product(recruiter_names, pd.date_range(from_date, to_date, freq='D')))
+
+    # Sort combinations by date (earliest to latest)
+    all_recruiter_date_combinations.sort(key=lambda x: x[1])
 
     # Fetch all candidates within the specified date range
     candidates_query = session.query(Candidate.recruiter, Candidate.date_created, func.count(Candidate.id).label('count')).filter(
