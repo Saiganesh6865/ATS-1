@@ -10325,7 +10325,7 @@ def get_time_to_close(query, from_date, to_date):
     ).with_entities(
         Candidate.recruiter,
         func.avg(
-            func.EXTRACT(
+            func.date_part(
                 'day',
                 Candidate.last_working_date - Candidate.date_created
             )
