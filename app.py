@@ -10064,6 +10064,7 @@ from datetime import datetime, timedelta
 # from sqlalchemy import func
 from sqlalchemy import func, text
 from sqlalchemy.sql import text 
+from sqlalchemy import text
 import pandas as pd  # Import pandas for date_range
 
 # from sqlalchemy.orm import sessionmaker
@@ -10331,30 +10332,53 @@ def get_time_to_close(query, from_date, to_date):
 
 #     return [{'client': item.client, 'avg_time_to_close': item.avg_time_to_close} for item in time_to_close]
 
-def get_historical_performance(query, from_date, to_date):
-    sql_query = """
-    SELECT to_char(date_created, 'YYYY-MM') AS date_created,
-           AVG(EXTRACT(day FROM last_working_date - date_created)) AS avg_time_to_close
-    FROM candidates
-    WHERE status = 'SELECTED'
-      AND date_created >= :from_date
-      AND date_created <= :to_date
-    GROUP BY to_char(date_created, 'YYYY-MM')
+def get_historical_performance_analysis(from_date, to_date, interval='monthly'):
+    interval_map = {
+        'monthly': 'YYYY-MM',
+        'weekly': 'IYYY-IW',
+        'daily': 'YYYY-MM-DD',
+        'yearly': 'YYYY'
+    }
+
+    time_interval = interval_map.get(interval, 'YYYY-MM')
+
+    sql_query = f"""
+    SELECT 
+        recruiter,
+        to_char(date_created, :time_interval) AS period,
+        COUNT(*) FILTER (WHERE status = 'SELECTED') * 100.0 / COUNT(*) AS closure_rate
+    FROM 
+        candidates
+    WHERE 
+        date_created >= :from_date
+        AND date_created <= :to_date
+    GROUP BY 
+        recruiter, to_char(date_created, :time_interval)
+    ORDER BY 
+        recruiter, period
     """
 
     historical_performance = db.session.execute(
         text(sql_query),
-        {'from_date': from_date, 'to_date': to_date}
+        {'from_date': from_date, 'to_date': to_date, 'time_interval': time_interval}
     ).fetchall()
 
     # Convert results to desired format
-    historical_performance_filled = [
-        {'date': row.date_created, 'avg_time_to_close': row.avg_time_to_close or 0}
-        for row in historical_performance
-    ]
+    historical_performance_filled = {}
+    for row in historical_performance:
+        recruiter = row.recruiter
+        period = row.period
+        closure_rate = row.closure_rate
+
+        if recruiter not in historical_performance_filled:
+            historical_performance_filled[recruiter] = []
+
+        historical_performance_filled[recruiter].append({
+            'period': period,
+            'closure_rate': closure_rate
+        })
 
     return historical_performance_filled
-
 
 # @app.route('/analyze_recruitment', methods=['POST'])
 # def analyze_recruitment():
