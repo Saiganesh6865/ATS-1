@@ -10061,7 +10061,8 @@ def view_jd(job_id):
 
 from flask import Flask, request, jsonify
 from datetime import datetime, timedelta
-from sqlalchemy import func
+# from sqlalchemy import func
+from sqlalchemy import func, text
 from sqlalchemy.sql import text 
 import pandas as pd  # Import pandas for date_range
 
@@ -10301,15 +10302,18 @@ def get_time_to_close(query, from_date, to_date):
         Candidate.date_created >= from_date,
         Candidate.date_created <= to_date
     ).group_by(
+        Candidate.recruiter,
         func.to_char(Candidate.date_created, 'YYYY-MM')
     ).with_entities(
+        Candidate.recruiter.label('recruiter'),
         func.to_char(Candidate.date_created, 'YYYY-MM').label('date_created'),
         func.avg(
-            func.EXTRACT('day', Candidate.last_working_date - Candidate.date_created)
+            func.DATE_PART('day', func.age(Candidate.last_working_date, Candidate.date_created))
         ).label('avg_time_to_close')
     ).all()
 
-    return [{'date_created': item.date_created, 'avg_time_to_close': item.avg_time_to_close} for item in time_to_close]
+    return [{'recruiter': item.recruiter, 'date_created': item.date_created, 'avg_time_to_close': item.avg_time_to_close} for item in time_to_close]
+
     
 # def get_time_to_close(query):
 #     time_to_close = query.filter(Candidate.status == 'SELECTED').group_by(Candidate.client).with_entities(
