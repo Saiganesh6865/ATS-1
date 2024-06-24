@@ -10294,7 +10294,7 @@ def get_time_to_close(query):
     """
     time_to_close = query.filter(Candidate.status == 'SELECTED').group_by(Candidate.client).with_entities(
         Candidate.client,
-        func.avg(func.DATE_PART('day', Candidate.last_working_date - Candidate.date_created)).label('avg_time_to_close')
+        func.avg(extract('day', Candidate.last_working_date - Candidate.date_created)).label('avg_time_to_close')
     ).all()
 
     return [{'client': item.client, 'avg_time_to_close': item.avg_time_to_close} for item in time_to_close]
@@ -10305,7 +10305,7 @@ def get_historical_performance(query, from_date, to_date):
     """
     historical_performance = query.filter(Candidate.status == 'SELECTED').group_by(func.date_format(Candidate.date_created, "%Y-%m")).with_entities(
         func.date_format(Candidate.date_created, "%Y-%m").label('date_created'),
-        func.avg(func.DATE_PART('day', Candidate.last_working_date - Candidate.date_created)).label('avg_time_to_close')
+        func.avg(extract('day', Candidate.last_working_date - Candidate.date_created)).label('avg_time_to_close')
     ).all()
 
     # Create a dictionary with date as key and average time to close as value
