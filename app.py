@@ -10071,8 +10071,8 @@ import pandas as pd  # Import pandas for date_range
 # import plotly.io as pio
 
 
-@app.route('/generate_excel', methods=['POST'])
-def generate_excel():
+@app.route('/analyze_recruitment', methods=['POST'])
+def analyze_recruitment():
     data = request.json
 
     if not data:
@@ -10274,199 +10274,73 @@ def get_historical_performance(query, from_date, to_date):
 
     return historical_performance_filled
 
-# @app.route('/generate_excel', methods=['POST'])
-# def generate_excel():
-#     data = request.json
 
-#     if not data:
-#         return jsonify({'error': 'No JSON data provided'})
+import itertools
 
-#     recruiter_names = data.get('recruiter_names', [])
+@app.route('/generate_excel', methods=['POST'])
+def generate_excel():
+    data = request.json
 
-#     if not recruiter_names:
-#         return jsonify({'error': 'Please select any Recruiter'})
+    if not data:
+        return jsonify({'error': 'No JSON data provided'})
 
-#     try:
-#         from_date_str = data.get('from_date')
-#         to_date_str = data.get('to_date')
-#         from_date = datetime.strptime(from_date_str, "%Y-%m-%d")
-#         to_date = datetime.strptime(to_date_str, "%Y-%m-%d")
-#     except ValueError:
-#         return jsonify({'error': 'Invalid date format. Please use YYYY-MM-DD format.'})
+    user_id = data.get('user_id')
+    from_date_str = data.get('from_date')
+    to_date_str = data.get('to_date')
+    recruiter_names = data.get('recruiter_names', [])
 
-#     # Generate a complete date range for each recruiter
-#     complete_data = [{"recruiter": recruiter_name, "date_created": date.strftime("%Y-%m-%d")} 
-#                      for recruiter_name in recruiter_names 
-#                      for date in pd.date_range(from_date, to_date)]
+    if not recruiter_usernames:
+        return jsonify({'error': 'Please select any Recruiter'})
 
-#     complete_df = pd.DataFrame(complete_data)
+    try:
+        from_date = datetime.strptime(from_date_str, "%Y-%m-%d")
+        to_date = datetime.strptime(to_date_str, "%Y-%m-%d")
+    except ValueError:
+        return jsonify({'error': 'Invalid date format. Please use YYYY-MM-DD format.'})
 
-#     # Merge the provided data with the complete date range
-#     merged_df = pd.concat([pd.DataFrame(data), complete_df]).fillna(0)
+    # Example querying candidates (replace with actual SQLAlchemy queries)
+    session = Session()
+    
+    # Generate all recruiter-date combinations within the specified range
+    all_recruiter_date_combinations = list(itertools.product(recruiter_usernames, pd.date_range(from_date, to_date, freq='D')))
+    
+    # Fetch all candidates within the specified date range
+    candidates_query = session.query(Candidate.recruiter, Candidate.date_created, func.count(Candidate.id).label('count')).filter(
+        Candidate.recruiter.in_(recruiter_usernames),
+        Candidate.date_created >= from_date,
+        Candidate.date_created <= to_date
+    ).group_by(Candidate.recruiter, Candidate.date_created).all()
 
-#     # Convert date columns to datetime objects
-#     merged_df['date_created'] = pd.to_datetime(merged_df['date_created'])
-#     merged_df['date_closed'] = pd.to_datetime(merged_df['date_closed'], errors='coerce')
+    # Convert candidate data to a dictionary for easy lookup
+    candidate_data_dict = {(row.recruiter, row.date_created.strftime("%Y-%m-%d")): row.count for row in candidates_query}
 
-#     # Submission Analysis: Track daily, weekly, monthly, and yearly submissions
-#     submission_counts_daily = merged_df.groupby(['recruiter', pd.Grouper(key='date_created', freq='D')]).size().reset_index(name='daily_submissions')
-#     submission_counts_weekly = merged_df.groupby(['recruiter', pd.Grouper(key='date_created', freq='W-MON')]).size().reset_index(name='weekly_submissions')
-#     submission_counts_monthly = merged_df.groupby(['recruiter', pd.Grouper(key='date_created', freq='M')]).size().reset_index(name='monthly_submissions')
-#     submission_counts_yearly = merged_df.groupby(['recruiter', pd.Grouper(key='date_created', freq='Y')]).size().reset_index(name='yearly_submissions')
+    # Prepare data for the report
+    data = []
+    for recruiter, date in all_recruiter_date_combinations:
+        count = candidate_data_dict.get((recruiter, date.strftime("%Y-%m-%d")), 0)
+        data.append({
+            "recruiter": recruiter,
+            "date_created": date.strftime("%Y-%m-%d"),
+            "count": count
+        })
 
-#     # Compare submission rates among recruiters
-#     total_submissions = merged_df.groupby('recruiter').size().reset_index(name='total_submissions')
-#     submission_rates = pd.merge(total_submissions, submission_counts_monthly, on='recruiter', how='left').fillna(0)
-#     submission_rates['monthly_submission_rate'] = submission_rates['monthly_submissions'] / submission_rates['total_submissions']
+    # Convert data to DataFrame
+    data_df = pd.DataFrame(data)
 
-#     # Conversion Rate Analysis: Calculate conversion rate
-#     conversion_data = merged_df.dropna(subset=['date_closed'])
-#     conversion_data['conversion'] = (conversion_data['date_closed'] - conversion_data['date_created']).dt.days
-#     conversion_rates = conversion_data.groupby('recruiter')['conversion'].mean().reset_index()
+    # Creating a pivot table for the report
+    pivot_table = data_df.pivot_table(index='recruiter', columns='date_created', values='count', aggfunc='sum',
+                                      fill_value=0, margins=True, margins_name='Grand Total')
 
-#     # Client-Specific Analysis: Analyze client closure rates
-#     client_closure_rates = conversion_data.groupby('client')['conversion'].mean().reset_index()
+    # Convert pivot table to JSON for response
+    styled_pivot_table_json = pivot_table.to_json()
 
-#     # Job Type Analysis: Examine job type closure rates
-#     job_type_closure_rates = conversion_data.groupby('job_type')['conversion'].mean().reset_index()
+    return jsonify({
+        'user_id': user_id,
+        'from_date_str': from_date_str,
+        'to_date_str': to_date_str,
+        'pivot_table': styled_pivot_table_json
+    })
 
-#     # Time-to-Close Analysis: Track time to close
-#     time_to_close = conversion_data.groupby(['recruiter', 'client'])['conversion'].mean().reset_index()
-
-#     # Historical Performance Analysis: Evaluate trends in closure rates
-#     historical_performance = conversion_data.groupby(['recruiter', pd.Grouper(key='date_created', freq='M')])['conversion'].mean().reset_index()
-
-#     # Prepare JSON response
-#     recruiters = list(set(recruiter_names))
-
-#     return jsonify({
-#         'recruiters': recruiters,
-#         'submission_counts_daily': submission_counts_daily.to_dict(orient='records'),
-#         'submission_counts_weekly': submission_counts_weekly.to_dict(orient='records'),
-#         'submission_counts_monthly': submission_counts_monthly.to_dict(orient='records'),
-#         'submission_counts_yearly': submission_counts_yearly.to_dict(orient='records'),
-#         'submission_rates': submission_rates.to_dict(orient='records'),
-#         'conversion_rates': conversion_rates.to_dict(orient='records'),
-#         'client_closure_rates': client_closure_rates.to_dict(orient='records'),
-#         'job_type_closure_rates': job_type_closure_rates.to_dict(orient='records'),
-#         'time_to_close': time_to_close.to_dict(orient='records'),
-#         'historical_performance': historical_performance.to_dict(orient='records'),
-#         'from_date_str': from_date_str,
-#         'to_date_str': to_date_str
-#     })
-
-# @app.route('/generate_excel', methods=['POST'])
-# def generate_excel():
-#     data = request.json
-
-#     if not data:
-#         return jsonify({'error': 'No JSON data provided'})
-
-#     user_id = data.get('user_id')
-#     from_date_str = data.get('from_date')
-#     to_date_str = data.get('to_date')
-#     recruiter_names = data.get('recruiter_names', [])
-
-#     if not recruiter_names:
-#         return jsonify({'error': 'Please select any Recruiter'})
-
-#     try:
-#         from_date = datetime.strptime(from_date_str, "%Y-%m-%d")
-#         to_date = datetime.strptime(to_date_str, "%Y-%m-%d")
-#     except ValueError:
-#         return jsonify({'error': 'Invalid date format. Please use YYYY-MM-DD format.'})
-
-#     complete_data = [{"recruiter": recruiter_name, "date_created": date.strftime("%Y-%m-%d")} for recruiter_name in recruiter_names for date in pd.date_range(from_date, to_date)]
-
-#     complete_df = pd.DataFrame(complete_data)
-
-#     # Filter out rows with invalid date strings
-#     complete_df = complete_df[complete_df['date_created'] != "0"]
-
-#     merged_df = pd.concat([pd.DataFrame(data), complete_df]).fillna(0)
-
-#     grouped = merged_df.groupby(['recruiter', 'date_created']).size().reset_index(name='count')
-#     grouped['date_created'] = pd.to_datetime(grouped['date_created'], errors='coerce', format="%Y-%m-%d")
-#     grouped = grouped.dropna(subset=['date_created'])  # Remove rows with invalid dates
-#     grouped['date_created'] = grouped['date_created'].dt.strftime("%Y-%m-%d")
-
-#     pivot_table = grouped.pivot_table(index='recruiter', columns='date_created', values='count', aggfunc='sum',
-#                                       fill_value=0, margins=True, margins_name='Grand Total')
-
-#     styled_pivot_table = pivot_table.copy()
-
-#     recruiters = list(set(recruiter_names))
-
-#     # Convert pivot table to JSON
-#     styled_pivot_table_json = styled_pivot_table.to_json()
-
-#     # Generate bar chart using Plotly
-#     fig = px.bar(grouped, x='date_created', y='count', color='recruiter', title='Recruiter Activity')
-#     fig.update_layout(barmode='group', xaxis_tickangle=-45)
-
-#     # Convert the plotly figure to a JSON representation
-#     plot_json = pio.to_json(fig)
-
-#     return jsonify({
-#         'recruiters': recruiters,
-#         'styled_pivot_table': styled_pivot_table_json,
-#         'user_id': user_id,
-#         'from_date_str': from_date_str,
-#         'to_date_str': to_date_str,
-#         'plot': plot_json
-#     })
-
-# @app.route('/generate_excel', methods=['POST'])
-# def generate_excel():
-#     data = request.json
-
-#     if not data:
-#         return jsonify({'error': 'No JSON data provided'})
-
-#     user_id = data.get('user_id')
-#     from_date_str = data.get('from_date')
-#     to_date_str = data.get('to_date')
-#     recruiter_names = data.get('recruiter_names', [])
-
-#     if not recruiter_names:
-#         return jsonify({'error': 'Please select any Recruiter'})
-
-#     try:
-#         from_date = datetime.strptime(from_date_str, "%Y-%m-%d")
-#         to_date = datetime.strptime(to_date_str, "%Y-%m-%d")
-#     except ValueError:
-#         return jsonify({'error': 'Invalid date format. Please use YYYY-MM-DD format.'})
-
-#     complete_data = [{"recruiter": recruiter_name, "date_created": date.strftime("%Y-%m-%d")} for recruiter_name in recruiter_names for date in pd.date_range(from_date, to_date)]
-
-#     complete_df = pd.DataFrame(complete_data)
-
-#     # Filter out rows with invalid date strings
-#     complete_df = complete_df[complete_df['date_created'] != "0"]
-
-#     merged_df = pd.concat([pd.DataFrame(data), complete_df]).fillna(0)
-
-#     grouped = merged_df.groupby(['recruiter', 'date_created']).size().reset_index(name='count')
-#     grouped['date_created'] = pd.to_datetime(grouped['date_created'], errors='coerce', format="%Y-%m-%d")
-#     grouped = grouped.dropna(subset=['date_created'])  # Remove rows with invalid dates
-#     grouped['date_created'] = grouped['date_created'].dt.strftime("%Y-%m-%d")
-
-#     pivot_table = grouped.pivot_table(index='recruiter', columns='date_created', values='count', aggfunc='sum',
-#                                       fill_value=0, margins=True, margins_name='Grand Total')
-
-#     styled_pivot_table = pivot_table.copy()
-
-#     recruiters = list(set(recruiter_names))
-
-#     styled_pivot_table_json = styled_pivot_table.to_json()
-
-#     return jsonify({
-#         'recruiters': recruiters,
-#         'styled_pivot_table': styled_pivot_table_json,
-#         'user_id': user_id,
-#         'from_date_str': from_date_str,
-#         'to_date_str': to_date_str
-#     })
 
 # def re_send_notification(recruiter_email, job_id):
 #     msg = Message('Job Update Notification', sender='ganesh.s@makonissoft.com', recipients=[recruiter_email])
