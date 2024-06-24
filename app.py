@@ -10141,7 +10141,7 @@ def analyze_recruitment():
             role_industry_location_analysis = get_role_industry_location_analysis(candidates_query, recruiter_username, from_date, to_date)
 
             # 6. Time-to-Close Analysis
-            time_to_close = get_time_to_close(candidates_query)
+            time_to_close = get_time_to_close(candidates_query,from_date, to_date)
 
             # 7. Historical Performance Analysis
             historical_performance = get_historical_performance(candidates_query, from_date, to_date)
