@@ -10143,7 +10143,7 @@ def analyze_recruitment():
             role_industry_location_analysis = get_role_industry_location_analysis(candidates_query, recruiter_username, from_date, to_date)
 
             # 6. Time-to-Close Analysis
-            time_to_close = get_time_to_close(candidates_query,from_date, to_date, interval='monthly')
+            time_to_close = get_time_to_close(candidates_query,from_date, to_date)
 
             # 7. Historical Performance Analysis
             historical_performance = get_historical_performance(candidates_query, from_date, to_date)
@@ -10314,73 +10314,92 @@ def get_time_to_close(query, from_date, to_date):
     ).all()
 
     return [{'recruiter': item.recruiter, 'date_created': item.date_created, 'avg_time_to_close': item.avg_time_to_close} for item in time_to_close]
+    
+def get_time_to_close(query, from_date, to_date):
+    time_to_close = query.filter(
+        Candidate.status == 'SELECTED',
+        Candidate.date_created >= from_date,
+        Candidate.date_created <= to_date
+    ).group_by(
+        Candidate.recruiter
+    ).with_entities(
+        Candidate.recruiter,
+        func.avg(
+            func.DATE_PART(
+                'day',
+                Candidate.last_working_date - Candidate.date_created
+            )
+        ).label('avg_time_to_close')
+    ).all()
 
+    return [{'recruiter': item.recruiter, 'avg_time_to_close': item.avg_time_to_close} for item in time_to_close]
+    
 
-def get_historical_performance(user_id, recruiter_names, from_date, to_date, time_interval='monthly'):
-    # Determine the appropriate date format based on time_interval
-    interval_map = {
-        'monthly': 'YYYY-MM',
-        'weekly': 'IYYY-IW',
-        'daily': 'YYYY-MM-DD',
-        'yearly': 'YYYY'
-    }
+# def get_historical_performance(user_id, recruiter_names, from_date, to_date, time_interval='monthly'):
+#     # Determine the appropriate date format based on time_interval
+#     interval_map = {
+#         'monthly': 'YYYY-MM',
+#         'weekly': 'IYYY-IW',
+#         'daily': 'YYYY-MM-DD',
+#         'yearly': 'YYYY'
+#     }
     
-    time_interval = interval_map.get(time_interval, 'YYYY-MM')
+#     time_interval = interval_map.get(time_interval, 'YYYY-MM')
     
-    # SQL query to calculate closure rates over time
-    sql_query = """
-    SELECT to_char(date_created, :time_interval) AS date_interval,
-           COUNT(*) AS total_candidates,
-           SUM(CASE WHEN status = 'SELECTED' THEN 1 ELSE 0 END) AS closed_candidates,
-           AVG(CASE WHEN status = 'SELECTED' THEN EXTRACT(day FROM last_working_date - date_created) ELSE NULL END) AS avg_time_to_close
-    FROM candidates
-    WHERE recruiter IN :recruiter_names
-      AND date_created >= :from_date
-      AND date_created <= :to_date
-    GROUP BY date_interval
-    ORDER BY date_interval
-    """
+#     # SQL query to calculate closure rates over time
+#     sql_query = """
+#     SELECT to_char(date_created, :time_interval) AS date_interval,
+#            COUNT(*) AS total_candidates,
+#            SUM(CASE WHEN status = 'SELECTED' THEN 1 ELSE 0 END) AS closed_candidates,
+#            AVG(CASE WHEN status = 'SELECTED' THEN EXTRACT(day FROM last_working_date - date_created) ELSE NULL END) AS avg_time_to_close
+#     FROM candidates
+#     WHERE recruiter IN :recruiter_names
+#       AND date_created >= :from_date
+#       AND date_created <= :to_date
+#     GROUP BY date_interval
+#     ORDER BY date_interval
+#     """
     
-    # Execute the SQL query
-    historical_performance = db.session.execute(
-        text(sql_query),
-        {
-            'time_interval': time_interval,
-            'recruiter_names': tuple(recruiter_names),
-            'from_date': from_date,
-            'to_date': to_date
-        }
-    ).fetchall()
+#     # Execute the SQL query
+#     historical_performance = db.session.execute(
+#         text(sql_query),
+#         {
+#             'time_interval': time_interval,
+#             'recruiter_names': tuple(recruiter_names),
+#             'from_date': from_date,
+#             'to_date': to_date
+#         }
+#     ).fetchall()
     
-    # Calculate closure rates and trends
-    performance_data = []
-    prev_closure_rate = None
+#     # Calculate closure rates and trends
+#     performance_data = []
+#     prev_closure_rate = None
     
-    for row in historical_performance:
-        date_interval = row.date_interval
-        total_candidates = row.total_candidates
-        closed_candidates = row.closed_candidates
-        avg_time_to_close = row.avg_time_to_close or 0
+#     for row in historical_performance:
+#         date_interval = row.date_interval
+#         total_candidates = row.total_candidates
+#         closed_candidates = row.closed_candidates
+#         avg_time_to_close = row.avg_time_to_close or 0
         
-        closure_rate = (closed_candidates / total_candidates) * 100 if total_candidates > 0 else 0
+#         closure_rate = (closed_candidates / total_candidates) * 100 if total_candidates > 0 else 0
         
-        if prev_closure_rate is not None:
-            trend = 'improving' if closure_rate > prev_closure_rate else 'declining'
-        else:
-            trend = None
+#         if prev_closure_rate is not None:
+#             trend = 'improving' if closure_rate > prev_closure_rate else 'declining'
+#         else:
+#             trend = None
         
-        prev_closure_rate = closure_rate
+#         prev_closure_rate = closure_rate
         
-        performance_data.append({
-            'date_interval': date_interval,
-            'total_candidates': total_candidates,
-            'closed_candidates': closed_candidates,
-            'closure_rate': closure_rate,
-            'avg_time_to_close': avg_time_to_close,
-            'trend': trend
-        })
+#         performance_data.append({
+#             'date_interval': date_interval,
+#             'total_candidates': total_candidates,
+#             'closed_candidates': closed_candidates,
+#             'closure_rate': closure_rate,
+#             'avg_time_to_close': avg_time_to_close,
+#             'trend': trend
+#         })
     
-    return performance_data
+#     return performance_data
 
 
 # @app.route('/analyze_recruitment', methods=['POST'])
