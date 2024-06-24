@@ -10315,70 +10315,73 @@ def get_time_to_close(query, from_date, to_date):
 
     return [{'recruiter': item.recruiter, 'date_created': item.date_created, 'avg_time_to_close': item.avg_time_to_close} for item in time_to_close]
 
-    
-# def get_time_to_close(query):
-#     time_to_close = query.filter(Candidate.status == 'SELECTED').group_by(Candidate.client).with_entities(
-#         Candidate.client,
-#         func.avg(func.DATE_PART('day', Candidate.last_working_date - Candidate.date_created)).label('avg_time_to_close')
-#     ).all()
 
-#     return [{'client': item.client, 'avg_time_to_close': item.avg_time_to_close} for item in time_to_close]
-
-# def get_time_to_close(query):
-#     time_to_close = query.filter(Candidate.status == 'SELECTED').group_by(Candidate.client).with_entities(
-#         Candidate.client,
-#         func.avg(func.DATE_PART('day', func.cast(Candidate.last_working_date - Candidate.date_created, db.Integer))).label('avg_time_to_close')
-#     ).all()
-
-#     return [{'client': item.client, 'avg_time_to_close': item.avg_time_to_close} for item in time_to_close]
-
-def get_historical_performance_analysis(from_date, to_date, interval='monthly'):
+def get_historical_performance(user_id, recruiter_names, from_date, to_date, time_interval='monthly'):
+    # Determine the appropriate date format based on time_interval
     interval_map = {
         'monthly': 'YYYY-MM',
         'weekly': 'IYYY-IW',
         'daily': 'YYYY-MM-DD',
         'yearly': 'YYYY'
     }
-
-    time_interval = interval_map.get(interval, 'YYYY-MM')
-
-    sql_query = f"""
-    SELECT 
-        recruiter,
-        to_char(date_created, :time_interval) AS period,
-        COUNT(*) FILTER (WHERE status = 'SELECTED') * 100.0 / COUNT(*) AS closure_rate
-    FROM 
-        candidates
-    WHERE 
-        date_created >= :from_date
-        AND date_created <= :to_date
-    GROUP BY 
-        recruiter, to_char(date_created, :time_interval)
-    ORDER BY 
-        recruiter, period
+    
+    time_interval = interval_map.get(time_interval, 'YYYY-MM')
+    
+    # SQL query to calculate closure rates over time
+    sql_query = """
+    SELECT to_char(date_created, :time_interval) AS date_interval,
+           COUNT(*) AS total_candidates,
+           SUM(CASE WHEN status = 'SELECTED' THEN 1 ELSE 0 END) AS closed_candidates,
+           AVG(CASE WHEN status = 'SELECTED' THEN EXTRACT(day FROM last_working_date - date_created) ELSE NULL END) AS avg_time_to_close
+    FROM candidates
+    WHERE recruiter IN :recruiter_names
+      AND date_created >= :from_date
+      AND date_created <= :to_date
+    GROUP BY date_interval
+    ORDER BY date_interval
     """
-
+    
+    # Execute the SQL query
     historical_performance = db.session.execute(
         text(sql_query),
-        {'from_date': from_date, 'to_date': to_date, 'time_interval': time_interval}
+        {
+            'time_interval': time_interval,
+            'recruiter_names': tuple(recruiter_names),
+            'from_date': from_date,
+            'to_date': to_date
+        }
     ).fetchall()
-
-    # Convert results to desired format
-    historical_performance_filled = {}
+    
+    # Calculate closure rates and trends
+    performance_data = []
+    prev_closure_rate = None
+    
     for row in historical_performance:
-        recruiter = row.recruiter
-        period = row.period
-        closure_rate = row.closure_rate
-
-        if recruiter not in historical_performance_filled:
-            historical_performance_filled[recruiter] = []
-
-        historical_performance_filled[recruiter].append({
-            'period': period,
-            'closure_rate': closure_rate
+        date_interval = row.date_interval
+        total_candidates = row.total_candidates
+        closed_candidates = row.closed_candidates
+        avg_time_to_close = row.avg_time_to_close or 0
+        
+        closure_rate = (closed_candidates / total_candidates) * 100 if total_candidates > 0 else 0
+        
+        if prev_closure_rate is not None:
+            trend = 'improving' if closure_rate > prev_closure_rate else 'declining'
+        else:
+            trend = None
+        
+        prev_closure_rate = closure_rate
+        
+        performance_data.append({
+            'date_interval': date_interval,
+            'total_candidates': total_candidates,
+            'closed_candidates': closed_candidates,
+            'closure_rate': closure_rate,
+            'avg_time_to_close': avg_time_to_close,
+            'trend': trend
         })
+    
+    return performance_data
 
-    return historical_performance_filled
 
 # @app.route('/analyze_recruitment', methods=['POST'])
 # def analyze_recruitment():
