@@ -10061,7 +10061,7 @@ def view_jd(job_id):
 
 from flask import Flask, request, jsonify
 from datetime import datetime, timedelta
-from sqlalchemy import func, extract  # Import func from SQLAlchemy
+from sqlalchemy import func, extract,text  # Import func from SQLAlchemy
 import pandas as pd  # Import pandas for date_range
 
 # from sqlalchemy.orm import sessionmaker
@@ -10070,6 +10070,7 @@ import pandas as pd  # Import pandas for date_range
 # import plotly.express as px
 # import plotly.io as pio
 
+# Flask route for analyzing recruitment data
 @app.route('/analyze_recruitment', methods=['POST'])
 def analyze_recruitment():
     data = request.json
@@ -10280,41 +10281,48 @@ def get_role_industry_location_analysis(query, recruiter_username, from_date, to
     ).filter(
         Candidate.recruiter == recruiter_username,
         Candidate.date_created >= from_date,
-        Candidate.date_created <= to_date
+        Candidate.date_created <= to_date,
+        Candidate.status == 'SELECTED'  # Only onboarded candidates
     ).group_by(
         JobPost.role,
         JobPost.location
     ).all()
 
-    return [{'role': item.role, 'location': item.location, 'count': item.count} for item in role_industry_location_analysis]
+    return [{
+        'role': item.role,
+        'location': item.location,
+        'count': item.count
+    } for item in role_industry_location_analysis]
 
 def get_time_to_close(query):
-    """
-    Helper function to calculate average time to close.
-    """
     time_to_close = query.filter(Candidate.status == 'SELECTED').group_by(Candidate.client).with_entities(
         Candidate.client,
-        func.avg(func.DATE_PART('day', Candidate.last_working_date - Candidate.date_created)).label('avg_time_to_close')
+        func.avg(func.DATE_PART('day', func.cast(Candidate.last_working_date - Candidate.date_created, db.Integer))).label('avg_time_to_close')
     ).all()
 
     return [{'client': item.client, 'avg_time_to_close': item.avg_time_to_close} for item in time_to_close]
 
-
 def get_historical_performance(query, from_date, to_date):
+    sql_query = """
+    SELECT to_char(date_created, 'YYYY-MM') AS date_created,
+           AVG(EXTRACT(day FROM last_working_date - date_created)) AS avg_time_to_close
+    FROM candidates
+    WHERE status = 'SELECTED'
+      AND date_created >= :from_date
+      AND date_created <= :to_date
+    GROUP BY to_char(date_created, 'YYYY-MM')
     """
-    Helper function to get historical performance.
-    """
-    historical_performance = query.filter(Candidate.status == 'SELECTED').group_by(func.date_format(Candidate.date_created, "%Y-%m")).with_entities(
-        func.date_format(Candidate.date_created, "%Y-%m").label('date_created'),
-        func.avg(extract('day', Candidate.last_working_date - Candidate.date_created)).label('avg_time_to_close')
-    ).all()
 
-    # Create a dictionary with date as key and average time to close as value
-    historical_performance_dict = {item.date_created: item.avg_time_to_close for item in historical_performance}
+    historical_performance = db.session.execute(
+        text(sql_query),
+        {'from_date': from_date, 'to_date': to_date}
+    ).fetchall()
 
-    # Fill in missing dates with 0 average time to close
-    date_range = pd.date_range(from_date, to_date, freq='M')
-    historical_performance_filled = [{'date': date.strftime('%Y-%m'), 'avg_time_to_close': historical_performance_dict.get(date.strftime('%Y-%m'), 0)} for date in date_range]
+    # Convert results to desired format
+    historical_performance_filled = [
+        {'date': row.date_created, 'avg_time_to_close': row.avg_time_to_close or 0}
+        for row in historical_performance
+    ]
 
     return historical_performance_filled
 
