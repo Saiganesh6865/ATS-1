@@ -10063,6 +10063,7 @@ from flask import Flask, request, jsonify
 from datetime import datetime, timedelta
 from sqlalchemy import func  # Import func from SQLAlchemy
 import pandas as pd  # Import pandas for date_range
+
 # from sqlalchemy.orm import sessionmaker
 # from sqlalchemy import create_engine
 
@@ -10101,7 +10102,7 @@ def generate_excel():
     # Loop through each recruiter
     for recruiter_username in recruiter_names:
         # Query candidates for the current recruiter and date range
-        candidates_query = Candidate.query.filter(
+        candidates_query = Session().query(Candidate).filter(
             Candidate.recruiter == recruiter_username,
             Candidate.date_created >= from_date,
             Candidate.date_created <= to_date
@@ -10173,31 +10174,33 @@ def generate_excel():
         'message': 'Data analysis completed successfully'
     })
 
-def get_submission_counts(query, from_date, to_date, interval):
+def get_submission_counts(candidates_query, from_date, to_date, interval):
     """
     Helper function to get submission counts grouped by specified interval.
     """
     if interval == 'daily':
-        grouped_query = query.group_by(func.date(Candidate.date_created)).with_entities(func.date(Candidate.date_created), func.count())
+        date_part = func.TO_CHAR(candidates_query.date_created, 'YYYY-MM-DD')
+        group_by = func.DATE(candidates_query.date_created)
     elif interval == 'weekly':
-        grouped_query = query.group_by(func.yearweek(Candidate.date_created)).with_entities(func.yearweek(Candidate.date_created), func.count())
+        date_part = func.TO_CHAR(candidates_query.date_created, 'IYYY-IW')
+        group_by = func.TO_CHAR(candidates_query.date_created, 'IYYY-IW')
     elif interval == 'monthly':
-        grouped_query = query.group_by(func.date_format(Candidate.date_created, "%Y-%m")).with_entities(func.date_format(Candidate.date_created, "%Y-%m"), func.count())
+        date_part = func.TO_CHAR(candidates_query.date_created, 'YYYY-MM')
+        group_by = func.TO_CHAR(candidates_query.date_created, 'YYYY-MM')
     elif interval == 'yearly':
-        grouped_query = query.group_by(func.year(Candidate.date_created)).with_entities(func.year(Candidate.date_created), func.count())
-    else:
-        return []
+        date_part = func.TO_CHAR(candidates_query.date_created, 'YYYY')
+        group_by = func.TO_CHAR(candidates_query.date_created, 'YYYY')
+
+    grouped_query = candidates_query.filter(
+        candidates_query.date_created >= from_date,
+        candidates_query.date_created <= to_date
+    ).group_by(group_by).with_entities(
+        date_part.label('date_part'),
+        func.count().label('count')
+    )
 
     submission_counts = grouped_query.all()
-
-    # Create a dictionary with date as key and count as value
-    submission_counts_dict = {date.strftime('%Y-%m-%d' if interval == 'daily' else '%Y-%m'): count for date, count in submission_counts}
-
-    # Fill in missing dates with 0 count
-    date_range = pd.date_range(from_date, to_date, freq=interval[0].upper())
-    submission_counts_filled = [{interval: date.strftime('%Y-%m-%d' if interval == 'daily' else '%Y-%m'), 'count': submission_counts_dict.get(date.strftime('%Y-%m-%d' if interval == 'daily' else '%Y-%m'), 0)} for date in date_range]
-
-    return submission_counts_filled
+    return submission_counts
 
 def get_conversion_rate(query):
     """
@@ -10238,7 +10241,7 @@ def get_historical_performance(query, from_date, to_date):
     """
     Helper function to get historical performance.
     """
-    historical_performance = query.filter(Candidate.onboarded == True).group_by(func.date_format(Candidate.date_created, "%Y-%m")).with_entities(func.date_format(Candidate.date_created, "%Y-%m"), func.avg(func.datediff(Candidate.last_working_date, Candidate.date_created))).all()
+    historical_performance = query.filter(Candidate.onboarded == True).group_by(func.TO_CHAR(Candidate.date_created, 'YYYY-MM')).with_entities(func.TO_CHAR(Candidate.date_created, 'YYYY-MM'), func.avg(func.datediff(Candidate.last_working_date, Candidate.date_created))).all()
 
     # Create a dictionary with date as key and average time to close as value
     historical_performance_dict = {date.strftime('%Y-%m'): avg_time for date, avg_time in historical_performance}
@@ -10248,7 +10251,6 @@ def get_historical_performance(query, from_date, to_date):
     historical_performance_filled = [{'date': date.strftime('%Y-%m'), 'avg_time_to_close': historical_performance_dict.get(date.strftime('%Y-%m'), 0)} for date in date_range]
 
     return historical_performance_filled
-
 
 
 # @app.route('/generate_excel', methods=['POST'])
