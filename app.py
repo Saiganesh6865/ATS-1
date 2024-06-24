@@ -10147,7 +10147,7 @@ def analyze_recruitment():
 
             # 7. Historical Performance Analysis
             historical_performance = get_historical_performance(candidates_query, from_date, to_date)
-
+            
             # Store analyses for this recruiter
             recruiter_data[recruiter_username] = {
                 'submission_counts_daily': submission_counts_daily,
@@ -10335,35 +10335,27 @@ def get_role_industry_location_analysis(query, recruiter_username, from_date, to
 #     return [{'recruiter': item.recruiter, 'avg_time_to_close': item.avg_time_to_close} for item in time_to_close]
     
 
-def get_historical_performance(user_id, recruiter_names, from_date, to_date):
+def get_historical_performance(query, from_date, to_date):
     # SQL query to calculate closure rates over time
-    sql_query = """
-    SELECT to_char(date_created, 'YYYY-MM') AS date_interval,
-           COUNT(*) AS total_candidates,
-           SUM(CASE WHEN status = 'SELECTED' THEN 1 ELSE 0 END) AS closed_candidates,
-           AVG(CASE WHEN status = 'SELECTED' THEN DATE_PART('day', last_working_date - date_created) ELSE NULL END) AS avg_time_to_close
-    FROM candidates
-    WHERE recruiter = :user_id
-      AND date_created >= :from_date
-      AND date_created <= :to_date
-    GROUP BY date_interval
-    ORDER BY date_interval
-    """
-    
-    # Execute the SQL query
-    historical_performance = db.session.execute(
-        text(sql_query),
-        {
-            'user_id': user_id,
-            'from_date': from_date,
-            'to_date': to_date
-        }
-    ).fetchall()
-    
-    # Calculate closure rates and trends
+    historical_performance = query.filter(
+        Candidate.date_created >= from_date,
+        Candidate.date_created <= to_date,
+        Candidate.status == 'SELECTED'
+    ).with_entities(
+        func.to_char(Candidate.date_created, 'YYYY-MM').label('date_interval'),
+        func.count().label('total_candidates'),
+        func.sum(func.case([(Candidate.status == 'SELECTED', 1)], else_=0)).label('closed_candidates'),
+        func.avg(func.extract('day', Candidate.last_working_date - Candidate.date_created)).label('avg_time_to_close')
+    ).group_by(
+        func.to_char(Candidate.date_created, 'YYYY-MM')
+    ).order_by(
+        func.to_char(Candidate.date_created, 'YYYY-MM')
+    ).all()
+
+    # Process the query results into the desired format
     performance_data = []
     prev_closure_rate = None
-    
+
     for row in historical_performance:
         date_interval = row.date_interval
         total_candidates = row.total_candidates
