@@ -10061,7 +10061,7 @@ def view_jd(job_id):
 
 from flask import Flask, request, jsonify
 from datetime import datetime, timedelta
-from sqlalchemy import func  # Import func from SQLAlchemy
+from sqlalchemy import func, extract  # Import func from SQLAlchemy
 import pandas as pd  # Import pandas for date_range
 
 # from sqlalchemy.orm import sessionmaker
