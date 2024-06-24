@@ -68,3 +68,5 @@ docx
 Pillow
 
 PyMuPDF
+
+plotly==5.1.0
