@@ -10062,23 +10062,14 @@ def view_jd(job_id):
 from flask import Flask, request, jsonify
 from datetime import datetime, timedelta
 from sqlalchemy import func  # Import func from SQLAlchemy
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy import create_engine
 import pandas as pd  # Import pandas for date_range
+# from sqlalchemy.orm import sessionmaker
+# from sqlalchemy import create_engine
+
 # import plotly.express as px
 # import plotly.io as pio
 
 
-
-# Analysis types
-# ANALYSIS_TYPES = [
-#     'submission_analysis',
-#     'conversion_rate_analysis',
-#     'client_specific_analysis',
-#     'job_type_analysis',
-#     'time_to_close_analysis',
-#     'historical_performance_analysis'
-# ]
 
 @app.route('/generate_excel', methods=['POST'])
 def generate_excel():
@@ -10087,10 +10078,14 @@ def generate_excel():
     if not data:
         return jsonify({'error': 'No JSON data provided'})
 
-    recruiter_usernames = data.get('recruiter_usernames', [])
+    recruiter_names_str = data.get('recruiter_names')
 
-    if not recruiter_usernames:
+    # Check if recruiter_names is provided and not empty
+    if not recruiter_names_str:
         return jsonify({'error': 'Please select any Recruiter'})
+
+    # Convert recruiter_names_str to a list of recruiter names
+    recruiter_names = recruiter_names_str.split(',')
 
     try:
         from_date_str = data.get('from_date')
@@ -10104,7 +10099,7 @@ def generate_excel():
     recruiter_data = {}
 
     # Loop through each recruiter
-    for recruiter_username in recruiter_usernames:
+    for recruiter_username in recruiter_names:
         # Query candidates for the current recruiter and date range
         candidates_query = Candidate.query.filter(
             Candidate.recruiter == recruiter_username,
@@ -10253,6 +10248,8 @@ def get_historical_performance(query, from_date, to_date):
     historical_performance_filled = [{'date': date.strftime('%Y-%m'), 'avg_time_to_close': historical_performance_dict.get(date.strftime('%Y-%m'), 0)} for date in date_range]
 
     return historical_performance_filled
+
+
 
 # @app.route('/generate_excel', methods=['POST'])
 # def generate_excel():
