@@ -10061,7 +10061,8 @@ def view_jd(job_id):
 
 from flask import Flask, request, jsonify
 from datetime import datetime, timedelta
-from sqlalchemy import func, extract,text  # Import func from SQLAlchemy
+from sqlalchemy import func
+from sqlalchemy.sql import text 
 import pandas as pd  # Import pandas for date_range
 
 # from sqlalchemy.orm import sessionmaker
@@ -10296,21 +10297,20 @@ def get_role_industry_location_analysis(query, recruiter_username, from_date, to
     
 def get_time_to_close(query):
     time_to_close = query.filter(
-        Candidate.status == 'SELECTED'
+        Candidate.status == 'SELECTED',
+        Candidate.date_created >= from_date,
+        Candidate.date_created <= to_date
     ).group_by(
-        Candidate.client
+        func.to_char(Candidate.date_created, 'YYYY-MM')
     ).with_entities(
-        Candidate.client,
+        func.to_char(Candidate.date_created, 'YYYY-MM').label('date_created'),
         func.avg(
-            func.DATE_PART(
-                'day',
-                text("(candidates.last_working_date - candidates.date_created) * interval '1 day'")
-            )
+            func.EXTRACT('day', Candidate.last_working_date - Candidate.date_created)
         ).label('avg_time_to_close')
     ).all()
 
-    return [{'client': item.client, 'avg_time_to_close': item.avg_time_to_close} for item in time_to_close]
-
+    return [{'date_created': item.date_created, 'avg_time_to_close': item.avg_time_to_close} for item in time_to_close]
+    
 # def get_time_to_close(query):
 #     time_to_close = query.filter(Candidate.status == 'SELECTED').group_by(Candidate.client).with_entities(
 #         Candidate.client,
