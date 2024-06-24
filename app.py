@@ -10276,7 +10276,6 @@ def get_historical_performance(query, from_date, to_date):
 
 
 import itertools
-
 @app.route('/generate_excel', methods=['POST'])
 def generate_excel():
     data = request.json
@@ -10287,9 +10286,9 @@ def generate_excel():
     user_id = data.get('user_id')
     from_date_str = data.get('from_date')
     to_date_str = data.get('to_date')
-    recruiter_usernames = data.get('recruiter_usernames', [])
+    recruiter_names = data.get('recruiter_names', [])
 
-    if not recruiter_usernames:
+    if not recruiter_names:
         return jsonify({'error': 'Please select any Recruiter'})
 
     try:
@@ -10298,15 +10297,14 @@ def generate_excel():
     except ValueError:
         return jsonify({'error': 'Invalid date format. Please use DD-MM-YYYY format.'})
 
-    # Example querying candidates (replace with actual SQLAlchemy queries)
     session = Session()
     
     # Generate all recruiter-date combinations within the specified range
-    all_recruiter_date_combinations = list(itertools.product(recruiter_usernames, pd.date_range(from_date, to_date, freq='D')))
+    all_recruiter_date_combinations = list(itertools.product(recruiter_names, pd.date_range(from_date, to_date, freq='D')))
 
     # Fetch all candidates within the specified date range
     candidates_query = session.query(Candidate.recruiter, Candidate.date_created, func.count(Candidate.id).label('count')).filter(
-        Candidate.recruiter.in_(recruiter_usernames),
+        Candidate.recruiter.in_(recruiter_names),
         Candidate.date_created >= from_date,
         Candidate.date_created <= to_date
     ).group_by(Candidate.recruiter, Candidate.date_created).all()
