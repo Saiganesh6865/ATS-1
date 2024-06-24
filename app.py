@@ -10295,7 +10295,7 @@ def get_role_industry_location_analysis(query, recruiter_username, from_date, to
         'count': item.count
     } for item in role_industry_location_analysis]
     
-def get_time_to_close(query):
+def get_time_to_close(query, from_date, to_date):
     time_to_close = query.filter(
         Candidate.status == 'SELECTED',
         Candidate.date_created >= from_date,
