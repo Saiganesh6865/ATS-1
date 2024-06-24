@@ -10351,9 +10351,9 @@ def generate_excel():
     pivot_table = data_df.pivot_table(index='recruiter', columns='date_created', values='count', aggfunc='sum',
                                       fill_value=0, margins=True, margins_name='Grand Total')
 
-    # Reordering columns to match from_date to to_date
-    date_columns = pd.date_range(from_date, to_date, freq='D').strftime('%d-%m-%Y')
-    pivot_table = pivot_table[date_columns]
+    # # Reordering columns to match from_date to to_date
+    # date_columns = pd.date_range(from_date, to_date, freq='D').strftime('%d-%m-%Y')
+    # pivot_table = pivot_table[date_columns]
 
     # Convert pivot table to JSON for response
     styled_pivot_table_json = pivot_table.to_json()
