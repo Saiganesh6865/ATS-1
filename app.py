@@ -10145,7 +10145,7 @@ def generate_excel():
             # 5. Role, Industry, and Location Analysis
             role_industry_location_analysis = db.session.query(
                 JobPost.role,
-                JobPost.industry,
+                # JobPost.industry,
                 JobPost.location,
                 func.count().label('count')
             ).join(
@@ -10157,7 +10157,7 @@ def generate_excel():
                 Candidate.date_created <= to_date
             ).group_by(
                 JobPost.role,
-                JobPost.industry,
+                # JobPost.industry,
                 JobPost.location
             ).all()
 
