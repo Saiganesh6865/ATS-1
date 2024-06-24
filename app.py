@@ -10289,27 +10289,29 @@ def generate_excel():
     to_date_str = data.get('to_date')
     recruiter_names = data.get('recruiter_names', [])
 
-    if not recruiter_usernames:
+    if not recruiter_names:
         return jsonify({'error': 'Please select any Recruiter'})
 
     try:
-        from_date = datetime.strptime(from_date_str, "%Y-%m-%d")
-        to_date = datetime.strptime(to_date_str, "%Y-%m-%d")
+        from_date = datetime.strptime(from_date_str, "%d-%m-%Y")
+        to_date = datetime.strptime(to_date_str, "%d-%m-%Y")
     except ValueError:
-        return jsonify({'error': 'Invalid date format. Please use YYYY-MM-DD format.'})
+        return jsonify({'error': 'Invalid date format. Please use DD-MM-YYYY format.'})
 
-    # Example querying candidates (replace with actual SQLAlchemy queries)
-    session = Session()
-    
     # Generate all recruiter-date combinations within the specified range
-    all_recruiter_date_combinations = list(itertools.product(recruiter_usernames, pd.date_range(from_date, to_date, freq='D')))
-    
+    all_recruiter_date_combinations = list(itertools.product(recruiter_names, pd.date_range(from_date, to_date, freq='D')))
+
+    # Open a session and fetch data
+    session = Session()
+
     # Fetch all candidates within the specified date range
     candidates_query = session.query(Candidate.recruiter, Candidate.date_created, func.count(Candidate.id).label('count')).filter(
-        Candidate.recruiter.in_(recruiter_usernames),
-        Candidate.date_created >= from_date,
-        Candidate.date_created <= to_date
+        Candidate.recruiter.in_(recruiter_names),
+        Candidate.date_created >= from_date.strftime("%Y-%m-%d"),
+        Candidate.date_created <= to_date.strftime("%Y-%m-%d")
     ).group_by(Candidate.recruiter, Candidate.date_created).all()
+
+    session.close()
 
     # Convert candidate data to a dictionary for easy lookup
     candidate_data_dict = {(row.recruiter, row.date_created.strftime("%Y-%m-%d")): row.count for row in candidates_query}
