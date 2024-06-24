@@ -10071,7 +10071,6 @@ import pandas as pd  # Import pandas for date_range
 # import plotly.io as pio
 
 
-
 @app.route('/generate_excel', methods=['POST'])
 def generate_excel():
     data = request.json
@@ -10099,7 +10098,7 @@ def generate_excel():
     # Loop through each recruiter
     for recruiter_username in recruiter_usernames:
         # Query candidates for the current recruiter and date range
-        candidates_query = Candidate.query.filter(
+        candidates_query = db.session.query(Candidate).filter(
             Candidate.recruiter == recruiter_username,
             Candidate.date_created >= from_date,
             Candidate.date_created <= to_date
@@ -10127,13 +10126,45 @@ def generate_excel():
             # 3. Client-Specific Analysis
             client_closure_rates = get_client_closure_rates(candidates_query)
 
-            # 4. Job Type Analysis
-            job_type_closure_rates = get_job_type_closure_rates(candidates_query)
+            # 4. Job Type Analysis - Query job type closure rates
+            job_type_closure_rates = db.session.query(
+                JobPost.job_type,
+                func.count().label('count')
+            ).join(
+                Candidate,
+                Candidate.job_id == JobPost.id
+            ).filter(
+                Candidate.recruiter == recruiter_username,
+                Candidate.date_created >= from_date,
+                Candidate.date_created <= to_date,
+                Candidate.onboarded == True  # Only onboarded candidates
+            ).group_by(
+                JobPost.job_type
+            ).all()
 
-            # 5. Time-to-Close Analysis
+            # 5. Role, Industry, and Location Analysis
+            role_industry_location_analysis = db.session.query(
+                JobPost.role,
+                JobPost.industry,
+                JobPost.location,
+                func.count().label('count')
+            ).join(
+                Candidate,
+                Candidate.job_id == JobPost.id
+            ).filter(
+                Candidate.recruiter == recruiter_username,
+                Candidate.date_created >= from_date,
+                Candidate.date_created <= to_date
+            ).group_by(
+                JobPost.role,
+                JobPost.industry,
+                JobPost.location
+            ).all()
+
+            # 6. Time-to-Close Analysis
             time_to_close = get_time_to_close(candidates_query)
 
-            # 6. Historical Performance Analysis
+            # 7. Historical Performance Analysis
             historical_performance = get_historical_performance(candidates_query, from_date, to_date)
 
             # Store analyses for this recruiter
@@ -10145,6 +10176,7 @@ def generate_excel():
                 'conversion_rate': conversion_rate,
                 'client_closure_rates': client_closure_rates,
                 'job_type_closure_rates': job_type_closure_rates,
+                'role_industry_location_analysis': role_industry_location_analysis,
                 'time_to_close': time_to_close,
                 'historical_performance': historical_performance,
                 'candidate_count': recruiter_candidate_count
@@ -10159,6 +10191,7 @@ def generate_excel():
                 'conversion_rate': 0.0,
                 'client_closure_rates': [],
                 'job_type_closure_rates': [],
+                'role_industry_location_analysis': [],
                 'time_to_close': [],
                 'historical_performance': [],
                 'candidate_count': 0
@@ -10173,17 +10206,17 @@ def generate_excel():
 
 def get_submission_counts(candidates_query, from_date, to_date, interval):
     if interval == 'daily':
-        date_part = func.TO_CHAR(func.DATE(Candidate.date_created), 'YYYY-MM-DD')
+        date_part = func.TO_CHAR(Candidate.date_created, 'YYYY-MM-DD')
         group_by = func.DATE(Candidate.date_created)
     elif interval == 'weekly':
-        date_part = func.TO_CHAR(func.DATE(Candidate.date_created), 'IYYY-IW')
-        group_by = func.TO_CHAR(func.DATE(Candidate.date_created), 'IYYY-IW')
+        date_part = func.TO_CHAR(Candidate.date_created, 'IYYY-IW')
+        group_by = func.TO_CHAR(Candidate.date_created, 'IYYY-IW')
     elif interval == 'monthly':
-        date_part = func.TO_CHAR(func.DATE(Candidate.date_created), 'YYYY-MM')
-        group_by = func.TO_CHAR(func.DATE(Candidate.date_created), 'YYYY-MM')
+        date_part = func.TO_CHAR(Candidate.date_created, 'YYYY-MM')
+        group_by = func.TO_CHAR(Candidate.date_created, 'YYYY-MM')
     elif interval == 'yearly':
-        date_part = func.TO_CHAR(func.DATE(Candidate.date_created), 'YYYY')
-        group_by = func.TO_CHAR(func.DATE(Candidate.date_created), 'YYYY')
+        date_part = func.TO_CHAR(Candidate.date_created, 'YYYY')
+        group_by = func.TO_CHAR(Candidate.date_created, 'YYYY')
     else:
         return []
 
@@ -10219,13 +10252,6 @@ def get_client_closure_rates(query):
     client_closure_rates = query.filter(Candidate.onboarded == True).group_by(Candidate.client).with_entities(Candidate.client, func.count()).all()
     return client_closure_rates
 
-def get_job_type_closure_rates(query):
-    """
-    Helper function to get job type closure rates.
-    """
-    job_type_closure_rates = query.filter(Candidate.onboarded == True).group_by(Candidate.job_type).with_entities(Candidate.job_type, func.count()).all()
-    return job_type_closure_rates
-
 def get_time_to_close(query):
     """
     Helper function to calculate average time to close.
@@ -10247,7 +10273,6 @@ def get_historical_performance(query, from_date, to_date):
     historical_performance_filled = [{'date': date.strftime('%Y-%m'), 'avg_time_to_close': historical_performance_dict.get(date.strftime('%Y-%m'), 0)} for date in date_range]
 
     return historical_performance_filled
-
 
 # @app.route('/generate_excel', methods=['POST'])
 # def generate_excel():
