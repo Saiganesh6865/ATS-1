@@ -10149,7 +10149,7 @@ def analyze_recruitment():
                 'job_type_closure_rates': job_type_closure_rates,
                 'role_industry_location_analysis': role_industry_location_analysis,
                 # 'time_to_close': time_to_close,
-                'historical_performance': historical_performance,
+                # 'historical_performance': historical_performance,
                 'candidate_count': recruiter_candidate_count
             }
         else:
@@ -10164,7 +10164,7 @@ def analyze_recruitment():
                 'job_type_closure_rates': [],
                 'role_industry_location_analysis': [],
                 # 'time_to_close': [],
-                'historical_performance': [],
+                # 'historical_performance': [],
                 'candidate_count': 0
             }
 
@@ -10209,7 +10209,7 @@ def get_conversion_rate(query):
     """
     total_submissions = query.count()
     if total_submissions > 0:
-        conversion_rate_query = query.filter(Candidate.onboarded == True)
+        conversion_rate_query = query.filter(Candidate.status=='SELETED')
         successful_closures = conversion_rate_query.count()
         conversion_rate = successful_closures / total_submissions
     else:
@@ -10221,7 +10221,7 @@ def get_client_closure_rates(query):
     """
     Helper function to get client closure rates.
     """
-    client_closure_rates = query.filter(Candidate.onboarded == True).group_by(Candidate.client).with_entities(Candidate.client, func.count()).all()
+    client_closure_rates = query.filter(Candidate.status=='SELETED').group_by(Candidate.client).with_entities(Candidate.client, func.count()).all()
     return client_closure_rates
 
 def get_job_type_closure_rates(query, recruiter_username, from_date, to_date):
@@ -10278,20 +10278,20 @@ def get_role_industry_location_analysis(query, recruiter_username, from_date, to
 
 #     return time_to_close
 
-def get_historical_performance(query, from_date, to_date):
-    """
-    Helper function to get historical performance.
-    """
-    historical_performance = query.filter(Candidate.status == 'SELECTED').group_by(func.date_format(Candidate.date_created, "%Y-%m")).with_entities(func.date_format(Candidate.date_created, "%Y-%m"), func.avg(func.DATE_PART('day', Candidate.last_working_date - Candidate.date_created))).all()
+# def get_historical_performance(query, from_date, to_date):
+#     """
+#     Helper function to get historical performance.
+#     """
+#     historical_performance = query.filter(Candidate.status == 'SELECTED').group_by(func.date_format(Candidate.date_created, "%Y-%m")).with_entities(func.date_format(Candidate.date_created, "%Y-%m"), func.avg(func.DATE_PART('day', Candidate.last_working_date - Candidate.date_created))).all()
 
-    # Create a dictionary with date as key and average time to close as value
-    historical_performance_dict = {date.strftime('%Y-%m'): avg_time for date, avg_time in historical_performance}
+#     # Create a dictionary with date as key and average time to close as value
+#     historical_performance_dict = {date.strftime('%Y-%m'): avg_time for date, avg_time in historical_performance}
 
-    # Fill in missing dates with 0 average time to close
-    date_range = pd.date_range(from_date, to_date, freq='M')
-    historical_performance_filled = [{'date': date.strftime('%Y-%m'), 'avg_time_to_close': historical_performance_dict.get(date.strftime('%Y-%m'), 0)} for date in date_range]
+#     # Fill in missing dates with 0 average time to close
+#     date_range = pd.date_range(from_date, to_date, freq='M')
+#     historical_performance_filled = [{'date': date.strftime('%Y-%m'), 'avg_time_to_close': historical_performance_dict.get(date.strftime('%Y-%m'), 0)} for date in date_range]
 
-    return historical_performance_filled
+#     return historical_performance_filled
 
 
 import itertools
