@@ -10271,7 +10271,7 @@ def get_time_to_close(query):
     """
     Helper function to calculate average time to close.
     """
-    time_to_close = query.filter(Candidate.status == SELECTED).group_by(Candidate.client).with_entities(
+    time_to_close = query.filter(Candidate.status == 'SELECTED').group_by(Candidate.client).with_entities(
         Candidate.client,
         func.avg(func.DATE_PART('day', Candidate.last_working_date - Candidate.date_created)).label('avg_time_to_close')
     ).all()
