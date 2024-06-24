@@ -10062,6 +10062,8 @@ def view_jd(job_id):
 from flask import Flask, jsonify, request
 from datetime import datetime
 import pandas as pd
+import plotly.express as px
+import plotly.io as pio
 
 @app.route('/generate_excel', methods=['POST'])
 def generate_excel():
@@ -10105,15 +10107,76 @@ def generate_excel():
 
     recruiters = list(set(recruiter_names))
 
+    # Convert pivot table to JSON
     styled_pivot_table_json = styled_pivot_table.to_json()
+
+    # Generate bar chart using Plotly
+    fig = px.bar(grouped, x='date_created', y='count', color='recruiter', title='Recruiter Activity')
+    fig.update_layout(barmode='group', xaxis_tickangle=-45)
+
+    # Convert the plotly figure to a JSON representation
+    plot_json = pio.to_json(fig)
 
     return jsonify({
         'recruiters': recruiters,
         'styled_pivot_table': styled_pivot_table_json,
         'user_id': user_id,
         'from_date_str': from_date_str,
-        'to_date_str': to_date_str
+        'to_date_str': to_date_str,
+        'plot': plot_json
     })
+
+# @app.route('/generate_excel', methods=['POST'])
+# def generate_excel():
+#     data = request.json
+
+#     if not data:
+#         return jsonify({'error': 'No JSON data provided'})
+
+#     user_id = data.get('user_id')
+#     from_date_str = data.get('from_date')
+#     to_date_str = data.get('to_date')
+#     recruiter_names = data.get('recruiter_names', [])
+
+#     if not recruiter_names:
+#         return jsonify({'error': 'Please select any Recruiter'})
+
+#     try:
+#         from_date = datetime.strptime(from_date_str, "%Y-%m-%d")
+#         to_date = datetime.strptime(to_date_str, "%Y-%m-%d")
+#     except ValueError:
+#         return jsonify({'error': 'Invalid date format. Please use YYYY-MM-DD format.'})
+
+#     complete_data = [{"recruiter": recruiter_name, "date_created": date.strftime("%Y-%m-%d")} for recruiter_name in recruiter_names for date in pd.date_range(from_date, to_date)]
+
+#     complete_df = pd.DataFrame(complete_data)
+
+#     # Filter out rows with invalid date strings
+#     complete_df = complete_df[complete_df['date_created'] != "0"]
+
+#     merged_df = pd.concat([pd.DataFrame(data), complete_df]).fillna(0)
+
+#     grouped = merged_df.groupby(['recruiter', 'date_created']).size().reset_index(name='count')
+#     grouped['date_created'] = pd.to_datetime(grouped['date_created'], errors='coerce', format="%Y-%m-%d")
+#     grouped = grouped.dropna(subset=['date_created'])  # Remove rows with invalid dates
+#     grouped['date_created'] = grouped['date_created'].dt.strftime("%Y-%m-%d")
+
+#     pivot_table = grouped.pivot_table(index='recruiter', columns='date_created', values='count', aggfunc='sum',
+#                                       fill_value=0, margins=True, margins_name='Grand Total')
+
+#     styled_pivot_table = pivot_table.copy()
+
+#     recruiters = list(set(recruiter_names))
+
+#     styled_pivot_table_json = styled_pivot_table.to_json()
+
+#     return jsonify({
+#         'recruiters': recruiters,
+#         'styled_pivot_table': styled_pivot_table_json,
+#         'user_id': user_id,
+#         'from_date_str': from_date_str,
+#         'to_date_str': to_date_str
+#     })
 
 # def re_send_notification(recruiter_email, job_id):
 #     msg = Message('Job Update Notification', sender='ganesh.s@makonissoft.com', recipients=[recruiter_email])
