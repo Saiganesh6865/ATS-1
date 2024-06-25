@@ -10151,7 +10151,7 @@ def analyze_recruitment():
 
             for candidate in candidates:
                 all_candidates.append({
-                    'candidate_name':candidate.name,
+                    'candidate_name': candidate.name,
                     'job_id': candidate.job_id,
                     'client': candidate.client,
                     'recruiter': candidate.recruiter,
@@ -10191,7 +10191,8 @@ def analyze_recruitment():
         'total_candidate_count': total_candidate_count,
         'from_date_str': from_date_str,
         'to_date_str': to_date_str,
-        'message': 'Percentage and ranking calculations completed successfully'
+        'message': 'Percentage and ranking calculations completed successfully',
+        'bar_graph_data': generate_bar_graph_data(recruiter_data)
     }
 
     return jsonify(percentage_ranking_response)
@@ -10291,6 +10292,228 @@ def get_role_industry_location_analysis(query, recruiter_username, from_date, to
         'location': item.location,
         'count': item.count
     } for item in role_industry_location_analysis]
+
+def generate_bar_graph_data(recruiter_data):
+    bar_graph_data = {
+        'recruiters': [],
+        'candidate_counts': []
+    }
+
+    for recruiter, data in recruiter_data.items():
+        bar_graph_data['recruiters'].append(recruiter)
+        bar_graph_data['candidate_counts'].append(data['candidate_count'])
+
+    return bar_graph_data
+
+# @app.route('/analyze_recruitment', methods=['POST'])
+# def analyze_recruitment():
+#     data = request.json
+
+#     if not data:
+#         return jsonify({'error': 'No JSON data provided'})
+
+#     recruiter_usernames = data.get('recruiter_names', [])
+
+#     if not recruiter_usernames:
+#         return jsonify({'error': 'Please select any Recruiter'})
+
+#     try:
+#         from_date_str = data.get('from_date')
+#         to_date_str = data.get('to_date')
+#         from_date = datetime.strptime(from_date_str, "%d-%m-%Y")
+#         to_date = datetime.strptime(to_date_str, "%d-%m-%Y")
+#     except ValueError:
+#         return jsonify({'status': 'error', 'message': 'Invalid date format. Please use DD-MM-YYYY format.'})
+
+#     recruiter_data = {}
+#     total_candidate_count = 0
+#     all_candidates = []
+
+#     for recruiter_username in recruiter_usernames:
+#         candidates_query = db.session.query(Candidate).filter(
+#             Candidate.recruiter == recruiter_username,
+#             Candidate.date_created >= from_date,
+#             Candidate.date_created <= to_date
+#         )
+
+#         candidates = candidates_query.all()
+#         recruiter_candidate_count = candidates_query.count()
+#         total_candidate_count += recruiter_candidate_count
+
+#         if recruiter_candidate_count > 0:
+#             recruiter_data[recruiter_username] = {}
+
+#             submission_counts_daily = get_submission_counts(candidates_query, from_date, to_date, 'daily')
+#             submission_counts_weekly = get_submission_counts(candidates_query, from_date, to_date, 'weekly')
+#             submission_counts_monthly = get_submission_counts(candidates_query, from_date, to_date, 'monthly')
+#             submission_counts_yearly = get_submission_counts(candidates_query, from_date, to_date, 'yearly')
+
+#             selected_candidates_count = candidates_query.filter(Candidate.status == 'SELECTED').count()
+#             rejected_candidates_count = candidates_query.filter(Candidate.status == 'REJECTED').count()
+#             in_process_candidates_count = candidates_query.filter(Candidate.status.notin_(['SELECTED', 'REJECTED'])).count()
+
+#             conversion_rate = get_conversion_rate(candidates_query)
+#             client_closure_rates = get_client_closure_rates(candidates_query)
+#             job_type_closure_rates = get_job_type_closure_rates(candidates_query, recruiter_username, from_date, to_date)
+#             role_industry_location_analysis = get_role_industry_location_analysis(candidates_query, recruiter_username, from_date, to_date)
+
+#             recruiter_data[recruiter_username] = {
+#                 'submission_counts_daily': submission_counts_daily,
+#                 'submission_counts_weekly': submission_counts_weekly,
+#                 'submission_counts_monthly': submission_counts_monthly,
+#                 'submission_counts_yearly': submission_counts_yearly,
+#                 'selected_candidates_count': selected_candidates_count,
+#                 'rejected_candidates_count': rejected_candidates_count,
+#                 'in_process_candidates_count': in_process_candidates_count,
+#                 'conversion_rate': conversion_rate,
+#                 'client_closure_rates': client_closure_rates,
+#                 'job_type_closure_rates': job_type_closure_rates,
+#                 'role_industry_location_analysis': role_industry_location_analysis,
+#                 'candidate_count': recruiter_candidate_count
+#             }
+
+#             for candidate in candidates:
+#                 all_candidates.append({
+#                     'candidate_name':candidate.name,
+#                     'job_id': candidate.job_id,
+#                     'client': candidate.client,
+#                     'recruiter': candidate.recruiter,
+#                     'date_created': candidate.date_created.strftime('%Y-%m-%d'),
+#                     'time_created': candidate.date_created.strftime('%H:%M:%S'),
+#                     'profile': candidate.profile,
+#                     'last_working_date': candidate.last_working_date.strftime('%Y-%m-%d') if candidate.last_working_date else None,
+#                     'status': candidate.status
+#                 })
+#         else:
+#             recruiter_data[recruiter_username] = {
+#                 'submission_counts_daily': [],
+#                 'submission_counts_weekly': [],
+#                 'submission_counts_monthly': [],
+#                 'submission_counts_yearly': [],
+#                 'selected_candidates_count': 0,
+#                 'rejected_candidates_count': 0,
+#                 'in_process_candidates_count': 0,
+#                 'conversion_rate': 0.0,
+#                 'client_closure_rates': [],
+#                 'job_type_closure_rates': [],
+#                 'role_industry_location_analysis': [],
+#                 'candidate_count': 0
+#             }
+
+#     # Calculate percentage and ranking
+#     for recruiter in recruiter_data:
+#         recruiter_data[recruiter]['percentage_of_total'] = (recruiter_data[recruiter]['candidate_count'] / total_candidate_count) * 100
+    
+#     ranked_recruiters = sorted(recruiter_data.items(), key=lambda x: x[1]['candidate_count'], reverse=True)
+#     for rank, (recruiter, data) in enumerate(ranked_recruiters, start=1):
+#         recruiter_data[recruiter]['ranking'] = rank
+
+#     percentage_ranking_response = {
+#         'status': 'success',
+#         'recruiter_data': recruiter_data,
+#         'total_candidate_count': total_candidate_count,
+#         'from_date_str': from_date_str,
+#         'to_date_str': to_date_str,
+#         'message': 'Percentage and ranking calculations completed successfully'
+#     }
+
+#     return jsonify(percentage_ranking_response)
+
+# def get_submission_counts(candidates_query, from_date, to_date, interval):
+#     if interval == 'daily':
+#         grouped_query = candidates_query.filter(
+#             Candidate.date_created >= from_date,
+#             Candidate.date_created <= to_date
+#         ).group_by(func.DATE(Candidate.date_created)).with_entities(
+#             func.DATE(Candidate.date_created).label('date_part'),
+#             func.count().label('count')
+#         )
+#     elif interval == 'weekly':
+#         grouped_query = candidates_query.filter(
+#             Candidate.date_created >= from_date,
+#             Candidate.date_created <= to_date
+#         ).group_by(func.TO_CHAR(Candidate.date_created, 'IYYY-IW')).with_entities(
+#             func.TO_CHAR(Candidate.date_created, 'IYYY-IW').label('date_part'),
+#             func.count().label('count')
+#         )
+#     elif interval == 'monthly':
+#         grouped_query = candidates_query.filter(
+#             Candidate.date_created >= from_date,
+#             Candidate.date_created <= to_date
+#         ).group_by(func.TO_CHAR(Candidate.date_created, 'YYYY-MM')).with_entities(
+#             func.TO_CHAR(Candidate.date_created, 'YYYY-MM').label('date_part'),
+#             func.count().label('count')
+#         )
+#     elif interval == 'yearly':
+#         grouped_query = candidates_query.filter(
+#             Candidate.date_created >= from_date,
+#             Candidate.date_created <= to_date
+#         ).group_by(func.TO_CHAR(Candidate.date_created, 'YYYY')).with_entities(
+#             func.TO_CHAR(Candidate.date_created, 'YYYY').label('date_part'),
+#             func.count().label('count')
+#         )
+#     else:
+#         return []
+
+#     submission_counts = grouped_query.all()
+#     return [{'date_part': str(item.date_part), 'count': item.count} for item in submission_counts]
+
+# def get_conversion_rate(query):
+#     total_submissions = query.count()
+#     if total_submissions > 0:
+#         conversion_rate_query = query.filter(Candidate.status == 'SELECTED')
+#         successful_closures = conversion_rate_query.count()
+#         conversion_rate = successful_closures / total_submissions
+#     else:
+#         conversion_rate = 0.0
+
+#     return conversion_rate
+
+# def get_client_closure_rates(query):
+#     client_closure_rates = query.filter(Candidate.status == 'SELECTED').group_by(Candidate.client).with_entities(Candidate.client, func.count()).all()
+#     return [{'client': item.client, 'count': item.count} for item in client_closure_rates]
+
+# def get_job_type_closure_rates(query, recruiter_username, from_date, to_date):
+#     job_type_closure_rates = db.session.query(
+#         JobPost.job_type,
+#         func.count().label('count')
+#     ).join(
+#         Candidate,
+#         Candidate.job_id == JobPost.id
+#     ).filter(
+#         Candidate.recruiter == recruiter_username,
+#         Candidate.date_created >= from_date,
+#         Candidate.date_created <= to_date,
+#         Candidate.status == 'SELECTED'
+#     ).group_by(
+#         JobPost.job_type
+#     ).all()
+
+#     return [{'job_type': item.job_type, 'count': item.count} for item in job_type_closure_rates]
+
+# def get_role_industry_location_analysis(query, recruiter_username, from_date, to_date):
+#     role_industry_location_analysis = db.session.query(
+#         JobPost.role,
+#         JobPost.location,
+#         func.count().label('count')
+#     ).join(
+#         Candidate,
+#         Candidate.job_id == JobPost.id
+#     ).filter(
+#         Candidate.recruiter == recruiter_username,
+#         Candidate.date_created >= from_date,
+#         Candidate.date_created <= to_date,
+#         Candidate.status == 'SELECTED'
+#     ).group_by(
+#         JobPost.role,
+#         JobPost.location
+#     ).all()
+
+#     return [{
+#         'role': item.role,
+#         'location': item.location,
+#         'count': item.count
+#     } for item in role_industry_location_analysis]
 
 
 # @app.route('/analyze_recruitment', methods=['POST'])
@@ -11234,6 +11457,8 @@ def get_role_industry_location_analysis(query, recruiter_username, from_date, to
 
 
 import itertools
+
+
 @app.route('/generate_excel', methods=['POST'])
 def generate_excel():
     data = request.json
@@ -11256,7 +11481,7 @@ def generate_excel():
         return jsonify({'error': 'Invalid date format. Please use DD-MM-YYYY format.'})
 
     session = Session()
-    
+
     # Generate all recruiter-date combinations within the specified range
     all_recruiter_date_combinations = list(itertools.product(recruiter_names, pd.date_range(from_date, to_date, freq='D')))
 
@@ -11264,14 +11489,21 @@ def generate_excel():
     all_recruiter_date_combinations.sort(key=lambda x: x[1])
 
     # Fetch all candidates within the specified date range
-    candidates_query = session.query(Candidate.recruiter, Candidate.date_created, func.count(Candidate.id).label('count')).filter(
+    candidates_query = session.query(
+        Candidate.recruiter,
+        Candidate.date_created,
+        func.count(Candidate.id).label('count')
+    ).filter(
         Candidate.recruiter.in_(recruiter_names),
         Candidate.date_created >= from_date,
         Candidate.date_created <= to_date
     ).group_by(Candidate.recruiter, Candidate.date_created).all()
 
     # Convert candidate data to a dictionary for easy lookup
-    candidate_data_dict = {(row.recruiter, row.date_created.strftime("%d-%m-%Y")): row.count for row in candidates_query}
+    candidate_data_dict = {
+        (row.recruiter, row.date_created.strftime("%d-%m-%Y")): row.count
+        for row in candidates_query
+    }
 
     # Prepare data for the report
     data = []
@@ -11287,22 +11519,105 @@ def generate_excel():
     data_df = pd.DataFrame(data)
 
     # Creating a pivot table for the report
-    pivot_table = data_df.pivot_table(index='recruiter', columns='date_created', values='count', aggfunc='sum',
-                                      fill_value=0, margins=True, margins_name='Grand Total')
+    pivot_table = data_df.pivot_table(
+        index='recruiter',
+        columns='date_created',
+        values='count',
+        aggfunc='sum',
+        fill_value=0,
+        margins=True,
+        margins_name='Grand Total'
+    )
 
-    # # Reordering columns to match from_date to to_date
-    # date_columns = pd.date_range(from_date, to_date, freq='D').strftime('%d-%m-%Y')
-    # pivot_table = pivot_table[date_columns]
+    # Reordering columns to match from_date to to_date
+    date_columns = pd.date_range(from_date, to_date, freq='D').strftime('%d-%m-%Y')
+    pivot_table = pivot_table.reindex(columns=date_columns)
 
-    # Convert pivot table to JSON for response
-    styled_pivot_table_json = pivot_table.to_json()
+    # Convert pivot table to JSON string
+    pivot_table_json = pivot_table.to_json(orient='index')
 
-    return jsonify({
-        'user_id': user_id,
-        'from_date_str': from_date_str,
-        'to_date_str': to_date_str,
-        'pivot_table': styled_pivot_table_json
-    })
+    # Convert JSON string to dictionary for manipulation
+    pivot_table_dict = json.loads(pivot_table_json)
+
+    # Add 'from_date' and 'to_date' strings to the dictionary
+    pivot_table_dict['from_date_str'] = from_date_str
+    pivot_table_dict['to_date_str'] = to_date_str
+
+    # Convert dictionary back to JSON string
+    final_json_response = json.dumps(pivot_table_dict)
+
+    return jsonify(final_json_response)
+
+# import itertools
+# @app.route('/generate_excel', methods=['POST'])
+# def generate_excel():
+#     data = request.json
+
+#     if not data:
+#         return jsonify({'error': 'No JSON data provided'})
+
+#     user_id = data.get('user_id')
+#     from_date_str = data.get('from_date')
+#     to_date_str = data.get('to_date')
+#     recruiter_names = data.get('recruiter_names', [])
+
+#     if not recruiter_names:
+#         return jsonify({'error': 'Please select any Recruiter'})
+
+#     try:
+#         from_date = datetime.strptime(from_date_str, "%d-%m-%Y")
+#         to_date = datetime.strptime(to_date_str, "%d-%m-%Y")
+#     except ValueError:
+#         return jsonify({'error': 'Invalid date format. Please use DD-MM-YYYY format.'})
+
+#     session = Session()
+    
+#     # Generate all recruiter-date combinations within the specified range
+#     all_recruiter_date_combinations = list(itertools.product(recruiter_names, pd.date_range(from_date, to_date, freq='D')))
+
+#     # Sort combinations by date (earliest to latest)
+#     all_recruiter_date_combinations.sort(key=lambda x: x[1])
+
+#     # Fetch all candidates within the specified date range
+#     candidates_query = session.query(Candidate.recruiter, Candidate.date_created, func.count(Candidate.id).label('count')).filter(
+#         Candidate.recruiter.in_(recruiter_names),
+#         Candidate.date_created >= from_date,
+#         Candidate.date_created <= to_date
+#     ).group_by(Candidate.recruiter, Candidate.date_created).all()
+
+#     # Convert candidate data to a dictionary for easy lookup
+#     candidate_data_dict = {(row.recruiter, row.date_created.strftime("%d-%m-%Y")): row.count for row in candidates_query}
+
+#     # Prepare data for the report
+#     data = []
+#     for recruiter, date in all_recruiter_date_combinations:
+#         count = candidate_data_dict.get((recruiter, date.strftime("%d-%m-%Y")), 0)
+#         data.append({
+#             "recruiter": recruiter,
+#             "date_created": date.strftime("%d-%m-%Y"),
+#             "count": count
+#         })
+
+#     # Convert data to DataFrame
+#     data_df = pd.DataFrame(data)
+
+#     # Creating a pivot table for the report
+#     pivot_table = data_df.pivot_table(index='recruiter', columns='date_created', values='count', aggfunc='sum',
+#                                       fill_value=0, margins=True, margins_name='Grand Total')
+
+#     # # Reordering columns to match from_date to to_date
+#     # date_columns = pd.date_range(from_date, to_date, freq='D').strftime('%d-%m-%Y')
+#     # pivot_table = pivot_table[date_columns]
+
+#     # Convert pivot table to JSON for response
+#     styled_pivot_table_json = pivot_table.to_json()
+
+#     return jsonify({
+#         'user_id': user_id,
+#         'from_date_str': from_date_str,
+#         'to_date_str': to_date_str,
+#         'pivot_table': styled_pivot_table_json
+#     })
 
 
 # def re_send_notification(recruiter_email, job_id):
