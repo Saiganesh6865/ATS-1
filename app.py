@@ -10073,7 +10073,15 @@ import pandas as pd  # Import pandas for date_range
 # import plotly.express as px
 # import plotly.io as pio
 
-# Flask route for analyzing recruitment data
+import plotly.express as px
+import plotly.io as pio
+from flask import Flask, request, jsonify
+from sqlalchemy import func, extract
+from datetime import datetime
+import io
+import base64
+
+
 @app.route('/analyze_recruitment', methods=['POST'])
 def analyze_recruitment():
     data = request.json
@@ -10083,7 +10091,6 @@ def analyze_recruitment():
 
     recruiter_usernames = data.get('recruiter_names', [])
 
-    # Check if recruiter_usernames is provided and not empty
     if not recruiter_usernames:
         return jsonify({'error': 'Please select any Recruiter'})
 
@@ -10095,75 +10102,53 @@ def analyze_recruitment():
     except ValueError:
         return jsonify({'status': 'error', 'message': 'Invalid date format. Please use DD-MM-YYYY format.'})
 
-    # Initialize recruiter_data dictionary to store results for each recruiter
     recruiter_data = {}
-
-    # Total candidate count across all recruiters
     total_candidate_count = 0
-
-    # All candidates list
     all_candidates = []
 
-    # Loop through each recruiter
     for recruiter_username in recruiter_usernames:
-        # Query candidates for the current recruiter and date range
         candidates_query = db.session.query(Candidate).filter(
             Candidate.recruiter == recruiter_username,
             Candidate.date_created >= from_date,
             Candidate.date_created <= to_date
         )
 
-        # Fetch all candidates for the recruiter
         candidates = candidates_query.all()
-
-        # Count candidates for this recruiter
         recruiter_candidate_count = candidates_query.count()
         total_candidate_count += recruiter_candidate_count
 
         if recruiter_candidate_count > 0:
-            # Perform analyses for this recruiter
             recruiter_data[recruiter_username] = {}
 
-            # 1. Submission Analysis
             submission_counts_daily = get_submission_counts(candidates_query, from_date, to_date, 'daily')
             submission_counts_weekly = get_submission_counts(candidates_query, from_date, to_date, 'weekly')
             submission_counts_monthly = get_submission_counts(candidates_query, from_date, to_date, 'monthly')
             submission_counts_yearly = get_submission_counts(candidates_query, from_date, to_date, 'yearly')
 
-            # 2. Conversion Rate Analysis
+            selected_candidates_count = candidates_query.filter(Candidate.status == 'SELECTED').count()
+            rejected_candidates_count = candidates_query.filter(Candidate.status == 'REJECTED').count()
+            in_process_candidates_count = candidates_query.filter(Candidate.status.notin_(['SELECTED', 'REJECTED'])).count()
+
             conversion_rate = get_conversion_rate(candidates_query)
-
-            # 3. Client-Specific Analysis
             client_closure_rates = get_client_closure_rates(candidates_query)
-
-            # 4. Job Type Analysis - Query job type closure rates
             job_type_closure_rates = get_job_type_closure_rates(candidates_query, recruiter_username, from_date, to_date)
-
-            # 5. Role, Industry, and Location Analysis
             role_industry_location_analysis = get_role_industry_location_analysis(candidates_query, recruiter_username, from_date, to_date)
 
-            # 6. Time-to-Close Analysis
-            # time_to_close = get_time_to_close(candidates_query,from_date, to_date)
-
-            # 7. Historical Performance Analysis
-            historical_performance = get_historical_performance(candidates_query, from_date, to_date)
-            
-            # Store analyses for this recruiter
             recruiter_data[recruiter_username] = {
                 'submission_counts_daily': submission_counts_daily,
                 'submission_counts_weekly': submission_counts_weekly,
                 'submission_counts_monthly': submission_counts_monthly,
                 'submission_counts_yearly': submission_counts_yearly,
+                'selected_candidates_count': selected_candidates_count,
+                'rejected_candidates_count': rejected_candidates_count,
+                'in_process_candidates_count': in_process_candidates_count,
                 'conversion_rate': conversion_rate,
                 'client_closure_rates': client_closure_rates,
                 'job_type_closure_rates': job_type_closure_rates,
                 'role_industry_location_analysis': role_industry_location_analysis,
-                # 'time_to_close': time_to_close,
-                'historical_performance': historical_performance,
                 'candidate_count': recruiter_candidate_count
             }
 
-            # Add candidates to all_candidates list
             for candidate in candidates:
                 all_candidates.append({
                     'job_id': candidate.job_id,
@@ -10176,22 +10161,22 @@ def analyze_recruitment():
                     'status': candidate.status
                 })
         else:
-            # If no candidates found for the recruiter, initialize with default values
             recruiter_data[recruiter_username] = {
                 'submission_counts_daily': [],
                 'submission_counts_weekly': [],
                 'submission_counts_monthly': [],
                 'submission_counts_yearly': [],
+                'selected_candidates_count': 0,
+                'rejected_candidates_count': 0,
+                'in_process_candidates_count': 0,
                 'conversion_rate': 0.0,
                 'client_closure_rates': [],
                 'job_type_closure_rates': [],
                 'role_industry_location_analysis': [],
-                # 'time_to_close': [],
-                'historical_performance': [],
                 'candidate_count': 0
             }
 
-    return jsonify({
+    response_data = {
         'status': 'success',
         'recruiter_data': recruiter_data,
         'total_candidate_count': total_candidate_count,
@@ -10199,7 +10184,12 @@ def analyze_recruitment():
         'from_date_str': from_date_str,
         'to_date_str': to_date_str,
         'message': 'Data analysis completed successfully'
-    })
+    }
+
+    bar_graph = generate_bar_graph(recruiter_data)
+    response_data['bar_graph'] = bar_graph
+
+    return jsonify(response_data)
 
 def get_submission_counts(candidates_query, from_date, to_date, interval):
     if interval == 'daily':
@@ -10266,7 +10256,7 @@ def get_job_type_closure_rates(query, recruiter_username, from_date, to_date):
         Candidate.recruiter == recruiter_username,
         Candidate.date_created >= from_date,
         Candidate.date_created <= to_date,
-        Candidate.status == 'SELECTED'  # Only onboarded candidates
+        Candidate.status == 'SELECTED'
     ).group_by(
         JobPost.job_type
     ).all()
@@ -10285,7 +10275,7 @@ def get_role_industry_location_analysis(query, recruiter_username, from_date, to
         Candidate.recruiter == recruiter_username,
         Candidate.date_created >= from_date,
         Candidate.date_created <= to_date,
-        Candidate.status == 'SELECTED'  # Only onboarded candidates
+        Candidate.status == 'SELECTED'
     ).group_by(
         JobPost.role,
         JobPost.location
@@ -10296,6 +10286,242 @@ def get_role_industry_location_analysis(query, recruiter_username, from_date, to
         'location': item.location,
         'count': item.count
     } for item in role_industry_location_analysis]
+
+def generate_bar_graph(recruiter_data):
+    recruiters = list(recruiter_data.keys())
+    candidate_counts = [recruiter_data[recruiter]['candidate_count'] for recruiter in recruiters]
+
+    fig = px.bar(x=recruiters, y=candidate_counts, labels={'x': 'Recruiter Names', 'y': 'Candidates Count'}, title='Total Candidates per Recruiter')
+
+    image_bytes = pio.to_image(fig, format='png')
+    image_base64 = base64.b64encode(image_bytes).decode('utf-8')
+
+    return f'data:image/png;base64,{image_base64}'
+
+
+# # Flask route for analyzing recruitment data
+# @app.route('/analyze_recruitment', methods=['POST'])
+# def analyze_recruitment():
+#     data = request.json
+
+#     if not data:
+#         return jsonify({'error': 'No JSON data provided'})
+
+#     recruiter_usernames = data.get('recruiter_names', [])
+
+#     # Check if recruiter_usernames is provided and not empty
+#     if not recruiter_usernames:
+#         return jsonify({'error': 'Please select any Recruiter'})
+
+#     try:
+#         from_date_str = data.get('from_date')
+#         to_date_str = data.get('to_date')
+#         from_date = datetime.strptime(from_date_str, "%d-%m-%Y")
+#         to_date = datetime.strptime(to_date_str, "%d-%m-%Y")
+#     except ValueError:
+#         return jsonify({'status': 'error', 'message': 'Invalid date format. Please use DD-MM-YYYY format.'})
+
+#     # Initialize recruiter_data dictionary to store results for each recruiter
+#     recruiter_data = {}
+
+#     # Total candidate count across all recruiters
+#     total_candidate_count = 0
+
+#     # All candidates list
+#     all_candidates = []
+
+#     # Loop through each recruiter
+#     for recruiter_username in recruiter_usernames:
+#         # Query candidates for the current recruiter and date range
+#         candidates_query = db.session.query(Candidate).filter(
+#             Candidate.recruiter == recruiter_username,
+#             Candidate.date_created >= from_date,
+#             Candidate.date_created <= to_date
+#         )
+
+#         # Fetch all candidates for the recruiter
+#         candidates = candidates_query.all()
+
+#         # Count candidates for this recruiter
+#         recruiter_candidate_count = candidates_query.count()
+#         total_candidate_count += recruiter_candidate_count
+
+#         if recruiter_candidate_count > 0:
+#             # Perform analyses for this recruiter
+#             recruiter_data[recruiter_username] = {}
+
+#             # 1. Submission Analysis
+#             submission_counts_daily = get_submission_counts(candidates_query, from_date, to_date, 'daily')
+#             submission_counts_weekly = get_submission_counts(candidates_query, from_date, to_date, 'weekly')
+#             submission_counts_monthly = get_submission_counts(candidates_query, from_date, to_date, 'monthly')
+#             submission_counts_yearly = get_submission_counts(candidates_query, from_date, to_date, 'yearly')
+
+#             # 2. Conversion Rate Analysis
+#             conversion_rate = get_conversion_rate(candidates_query)
+
+#             # 3. Client-Specific Analysis
+#             client_closure_rates = get_client_closure_rates(candidates_query)
+
+#             # 4. Job Type Analysis - Query job type closure rates
+#             job_type_closure_rates = get_job_type_closure_rates(candidates_query, recruiter_username, from_date, to_date)
+
+#             # 5. Role, Industry, and Location Analysis
+#             role_industry_location_analysis = get_role_industry_location_analysis(candidates_query, recruiter_username, from_date, to_date)
+
+#             # 6. Time-to-Close Analysis
+#             # time_to_close = get_time_to_close(candidates_query,from_date, to_date)
+
+#             # 7. Historical Performance Analysis
+#             # historical_performance = get_historical_performance(candidates_query, from_date, to_date)
+            
+#             # Store analyses for this recruiter
+#             recruiter_data[recruiter_username] = {
+#                 'submission_counts_daily': submission_counts_daily,
+#                 'submission_counts_weekly': submission_counts_weekly,
+#                 'submission_counts_monthly': submission_counts_monthly,
+#                 'submission_counts_yearly': submission_counts_yearly,
+#                 'conversion_rate': conversion_rate,
+#                 'client_closure_rates': client_closure_rates,
+#                 'job_type_closure_rates': job_type_closure_rates,
+#                 'role_industry_location_analysis': role_industry_location_analysis,
+#                 # 'time_to_close': time_to_close,
+#                 # 'historical_performance': historical_performance,
+#                 'candidate_count': recruiter_candidate_count
+#             }
+
+#             # Add candidates to all_candidates list
+#             for candidate in candidates:
+#                 all_candidates.append({
+#                     'job_id': candidate.job_id,
+#                     'client': candidate.client,
+#                     'recruiter': candidate.recruiter,
+#                     'date_created': candidate.date_created.strftime('%Y-%m-%d'),
+#                     'time_created': candidate.date_created.strftime('%H:%M:%S'),
+#                     'profile': candidate.profile,
+#                     'last_working_date': candidate.last_working_date.strftime('%Y-%m-%d') if candidate.last_working_date else None,
+#                     'status': candidate.status
+#                 })
+#         else:
+#             # If no candidates found for the recruiter, initialize with default values
+#             recruiter_data[recruiter_username] = {
+#                 'submission_counts_daily': [],
+#                 'submission_counts_weekly': [],
+#                 'submission_counts_monthly': [],
+#                 'submission_counts_yearly': [],
+#                 'conversion_rate': 0.0,
+#                 'client_closure_rates': [],
+#                 'job_type_closure_rates': [],
+#                 'role_industry_location_analysis': [],
+#                 # 'time_to_close': [],
+#                 # 'historical_performance': [],
+#                 'candidate_count': 0
+#             }
+
+#     return jsonify({
+#         'status': 'success',
+#         'recruiter_data': recruiter_data,
+#         'total_candidate_count': total_candidate_count,
+#         'all_candidates': all_candidates,
+#         'from_date_str': from_date_str,
+#         'to_date_str': to_date_str,
+#         'message': 'Data analysis completed successfully'
+#     })
+
+# def get_submission_counts(candidates_query, from_date, to_date, interval):
+#     if interval == 'daily':
+#         grouped_query = candidates_query.filter(
+#             Candidate.date_created >= from_date,
+#             Candidate.date_created <= to_date
+#         ).group_by(func.DATE(Candidate.date_created)).with_entities(
+#             func.DATE(Candidate.date_created).label('date_part'),
+#             func.count().label('count')
+#         )
+#     elif interval == 'weekly':
+#         grouped_query = candidates_query.filter(
+#             Candidate.date_created >= from_date,
+#             Candidate.date_created <= to_date
+#         ).group_by(func.TO_CHAR(Candidate.date_created, 'IYYY-IW')).with_entities(
+#             func.TO_CHAR(Candidate.date_created, 'IYYY-IW').label('date_part'),
+#             func.count().label('count')
+#         )
+#     elif interval == 'monthly':
+#         grouped_query = candidates_query.filter(
+#             Candidate.date_created >= from_date,
+#             Candidate.date_created <= to_date
+#         ).group_by(func.TO_CHAR(Candidate.date_created, 'YYYY-MM')).with_entities(
+#             func.TO_CHAR(Candidate.date_created, 'YYYY-MM').label('date_part'),
+#             func.count().label('count')
+#         )
+#     elif interval == 'yearly':
+#         grouped_query = candidates_query.filter(
+#             Candidate.date_created >= from_date,
+#             Candidate.date_created <= to_date
+#         ).group_by(func.TO_CHAR(Candidate.date_created, 'YYYY')).with_entities(
+#             func.TO_CHAR(Candidate.date_created, 'YYYY').label('date_part'),
+#             func.count().label('count')
+#         )
+#     else:
+#         return []
+
+#     submission_counts = grouped_query.all()
+#     return [{'date_part': str(item.date_part), 'count': item.count} for item in submission_counts]
+
+# def get_conversion_rate(query):
+#     total_submissions = query.count()
+#     if total_submissions > 0:
+#         conversion_rate_query = query.filter(Candidate.status == 'SELECTED')
+#         successful_closures = conversion_rate_query.count()
+#         conversion_rate = successful_closures / total_submissions
+#     else:
+#         conversion_rate = 0.0
+
+#     return conversion_rate
+
+# def get_client_closure_rates(query):
+#     client_closure_rates = query.filter(Candidate.status == 'SELECTED').group_by(Candidate.client).with_entities(Candidate.client, func.count()).all()
+#     return [{'client': item.client, 'count': item.count} for item in client_closure_rates]
+
+# def get_job_type_closure_rates(query, recruiter_username, from_date, to_date):
+#     job_type_closure_rates = db.session.query(
+#         JobPost.job_type,
+#         func.count().label('count')
+#     ).join(
+#         Candidate,
+#         Candidate.job_id == JobPost.id
+#     ).filter(
+#         Candidate.recruiter == recruiter_username,
+#         Candidate.date_created >= from_date,
+#         Candidate.date_created <= to_date,
+#         Candidate.status == 'SELECTED'  # Only onboarded candidates
+#     ).group_by(
+#         JobPost.job_type
+#     ).all()
+
+#     return [{'job_type': item.job_type, 'count': item.count} for item in job_type_closure_rates]
+
+# def get_role_industry_location_analysis(query, recruiter_username, from_date, to_date):
+#     role_industry_location_analysis = db.session.query(
+#         JobPost.role,
+#         JobPost.location,
+#         func.count().label('count')
+#     ).join(
+#         Candidate,
+#         Candidate.job_id == JobPost.id
+#     ).filter(
+#         Candidate.recruiter == recruiter_username,
+#         Candidate.date_created >= from_date,
+#         Candidate.date_created <= to_date,
+#         Candidate.status == 'SELECTED'  # Only onboarded candidates
+#     ).group_by(
+#         JobPost.role,
+#         JobPost.location
+#     ).all()
+
+#     return [{
+#         'role': item.role,
+#         'location': item.location,
+#         'count': item.count
+#     } for item in role_industry_location_analysis]
     
 # def get_time_to_close(query, from_date, to_date):
 #     time_to_close = query.filter(
@@ -10335,52 +10561,52 @@ def get_role_industry_location_analysis(query, recruiter_username, from_date, to
 #     return [{'recruiter': item.recruiter, 'avg_time_to_close': item.avg_time_to_close} for item in time_to_close]
     
 
-def get_historical_performance(query, from_date, to_date):
-    # SQL query to calculate closure rates over time
-    historical_performance = query.filter(
-        Candidate.date_created >= from_date,
-        Candidate.date_created <= to_date,
-        Candidate.status == 'SELECTED'
-    ).with_entities(
-        func.to_char(Candidate.date_created, 'YYYY-MM').label('date_interval'),
-        func.count().label('total_candidates'),
-        func.sum(case((Candidate.status == 'SELECTED', 1), else_=0)).label('closed_candidates'),
-        func.avg(func.extract('day', Candidate.last_working_date - Candidate.date_created)).label('avg_time_to_close')
-    ).group_by(
-        func.to_char(Candidate.date_created, 'YYYY-MM')
-    ).order_by(
-        func.to_char(Candidate.date_created, 'YYYY-MM')
-    ).all()
+# def get_historical_performance(query, from_date, to_date):
+#     # SQL query to calculate closure rates over time
+#     historical_performance = query.filter(
+#         Candidate.date_created >= from_date,
+#         Candidate.date_created <= to_date,
+#         Candidate.status == 'SELECTED'
+#     ).with_entities(
+#         func.to_char(Candidate.date_created, 'YYYY-MM').label('date_interval'),
+#         func.count().label('total_candidates'),
+#         func.sum(case((Candidate.status == 'SELECTED', 1), else_=0)).label('closed_candidates'),
+#         func.avg(func.extract('day', Candidate.last_working_date - Candidate.date_created)).label('avg_time_to_close')
+#     ).group_by(
+#         func.to_char(Candidate.date_created, 'YYYY-MM')
+#     ).order_by(
+#         func.to_char(Candidate.date_created, 'YYYY-MM')
+#     ).all()
 
-    # Process the query results into the desired format
-    performance_data = []
-    prev_closure_rate = None
+#     # Process the query results into the desired format
+#     performance_data = []
+#     prev_closure_rate = None
 
-    for row in historical_performance:
-        date_interval = row.date_interval
-        total_candidates = row.total_candidates
-        closed_candidates = row.closed_candidates
-        avg_time_to_close = row.avg_time_to_close or 0
+#     for row in historical_performance:
+#         date_interval = row.date_interval
+#         total_candidates = row.total_candidates
+#         closed_candidates = row.closed_candidates
+#         avg_time_to_close = row.avg_time_to_close or 0
         
-        closure_rate = (closed_candidates / total_candidates) * 100 if total_candidates > 0 else 0
+#         closure_rate = (closed_candidates / total_candidates) * 100 if total_candidates > 0 else 0
         
-        if prev_closure_rate is not None:
-            trend = 'improving' if closure_rate > prev_closure_rate else 'declining'
-        else:
-            trend = None
+#         if prev_closure_rate is not None:
+#             trend = 'improving' if closure_rate > prev_closure_rate else 'declining'
+#         else:
+#             trend = None
         
-        prev_closure_rate = closure_rate
+#         prev_closure_rate = closure_rate
         
-        performance_data.append({
-            'date_interval': date_interval,
-            'total_candidates': total_candidates,
-            'closed_candidates': closed_candidates,
-            'closure_rate': closure_rate,
-            'avg_time_to_close': avg_time_to_close,
-            'trend': trend
-        })
+#         performance_data.append({
+#             'date_interval': date_interval,
+#             'total_candidates': total_candidates,
+#             'closed_candidates': closed_candidates,
+#             'closure_rate': closure_rate,
+#             'avg_time_to_close': avg_time_to_close,
+#             'trend': trend
+#         })
     
-    return performance_data
+#     return performance_data
 
 
 # @app.route('/analyze_recruitment', methods=['POST'])
