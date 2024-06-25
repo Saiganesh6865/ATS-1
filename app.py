@@ -10082,7 +10082,6 @@ from datetime import datetime
 import io
 import base64
 
-
 @app.route('/analyze_recruitment', methods=['POST'])
 def analyze_recruitment():
     data = request.json
@@ -10130,7 +10129,7 @@ def analyze_recruitment():
             submission_counts_yearly = get_submission_counts(candidates_query, from_date, to_date, 'yearly')
 
             rejected_candidates_count = candidates_query.filter(Candidate.status == 'Rejected').count()
-            in_process_candidates_count = candidates_query.filter(Candidate.status.notin_(['Selected', 'Rejected'])).count()
+            in_process_candidates_count = candidates_query.filter(~Candidate.status.in_(['Selected', 'Rejected'])).count()
 
             conversion_rate = get_conversion_rate(candidates_query)
             client_closure_rates = get_client_closure_rates(candidates_query)
@@ -10167,8 +10166,6 @@ def analyze_recruitment():
                     'client': candidate.client,
                     'recruiter': candidate.recruiter,
                     'date_created': candidate.date_created.strftime('%Y-%m-%d') if candidate.date_created else None,
-                    'time_created': candidate.time_created.strftime('%H:%M:%S') if candidate.time_created else None,
-                    'profile': candidate.profile,
                     'last_working_date': candidate.last_working_date.strftime('%Y-%m-%d') if candidate.last_working_date else None,
                     'status': candidate.status
                 })
