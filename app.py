@@ -10227,7 +10227,7 @@ def analyze_recruitment():
         'recruiter_data': recruiter_data,
         'total_candidate_count': total_candidate_count,
         'total_selected_candidates': total_selected_candidates,
-        'rejected_candidates_count': total_rejected_candidates,
+        'total_rejected_candidates_count': total_rejected_candidates,
         'total_process_candidates_count': total_process_candidates,
         'from_date_str': from_date_str,
         'to_date_str': to_date_str,
