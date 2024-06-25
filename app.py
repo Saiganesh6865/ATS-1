@@ -10087,12 +10087,12 @@ def analyze_recruitment():
     data = request.json
 
     if not data:
-        return jsonify({'error': 'No JSON data provided'})
+        return jsonify({'error': 'No JSON data provided'}), 400
 
     recruiter_usernames = data.get('recruiter_names', [])
 
     if not recruiter_usernames:
-        return jsonify({'error': 'Please select any Recruiter'})
+        return jsonify({'error': 'Please select any Recruiter'}), 400
 
     try:
         from_date_str = data.get('from_date')
@@ -10100,11 +10100,11 @@ def analyze_recruitment():
         from_date = datetime.strptime(from_date_str, "%d-%m-%Y")
         to_date = datetime.strptime(to_date_str, "%d-%m-%Y")
     except ValueError:
-        return jsonify({'status': 'error', 'message': 'Invalid date format. Please use DD-MM-YYYY format.'})
+        return jsonify({'status': 'error', 'message': 'Invalid date format. Please use DD-MM-YYYY format.'}), 400
 
     recruiter_data = {}
     total_candidate_count = 0
-    total_selected_candidates = 0  # Track total selected candidates across all recruiters
+    total_selected_candidates = 0
 
     for recruiter_username in recruiter_usernames:
         candidates_query = db.session.query(Candidate).filter(
@@ -10120,77 +10120,39 @@ def analyze_recruitment():
         selected_candidates_count = candidates_query.filter(Candidate.status == 'Selected').count()
         total_selected_candidates += selected_candidates_count
 
-        if recruiter_candidate_count > 0:
-            recruiter_data[recruiter_username] = {}
+        submission_counts_daily = get_submission_counts(candidates_query, from_date, to_date, 'daily')
+        submission_counts_weekly = get_submission_counts(candidates_query, from_date, to_date, 'weekly')
+        submission_counts_monthly = get_submission_counts(candidates_query, from_date, to_date, 'monthly')
+        submission_counts_yearly = get_submission_counts(candidates_query, from_date, to_date, 'yearly')
 
-            submission_counts_daily = get_submission_counts(candidates_query, from_date, to_date, 'daily')
-            submission_counts_weekly = get_submission_counts(candidates_query, from_date, to_date, 'weekly')
-            submission_counts_monthly = get_submission_counts(candidates_query, from_date, to_date, 'monthly')
-            submission_counts_yearly = get_submission_counts(candidates_query, from_date, to_date, 'yearly')
+        conversion_rate = get_conversion_rate(candidates_query)
+        client_closure_rates = get_client_closure_rates(candidates_query)
+        job_type_closure_rates = get_job_type_closure_rates(candidates_query, recruiter_username, from_date, to_date)
+        role_industry_location_analysis = get_role_industry_location_analysis(candidates_query, recruiter_username, from_date, to_date)
 
-            rejected_candidates_count = candidates_query.filter(Candidate.status == 'Rejected').count()
-            in_process_candidates_count = candidates_query.filter(~Candidate.status.in_(['Selected', 'Rejected'])).count()
+        recruiter_data[recruiter_username] = {
+            'selected_candidates_count': selected_candidates_count,
+            'submission_counts_daily': submission_counts_daily,
+            'submission_counts_weekly': submission_counts_weekly,
+            'submission_counts_monthly': submission_counts_monthly,
+            'submission_counts_yearly': submission_counts_yearly,
+            'conversion_rate': conversion_rate,
+            'client_closure_rates': client_closure_rates,
+            'job_type_closure_rates': job_type_closure_rates,
+            'role_industry_location_analysis': role_industry_location_analysis,
+            'candidates': []
+        }
 
-            conversion_rate = get_conversion_rate(candidates_query)
-            client_closure_rates = get_client_closure_rates(candidates_query)
-            job_type_closure_rates = get_job_type_closure_rates(candidates_query, recruiter_username, from_date, to_date)
-            role_industry_location_analysis = get_role_industry_location_analysis(candidates_query, recruiter_username, from_date, to_date)
-
-            # Calculate percentage of selected candidates specifically for this recruiter
-            if recruiter_candidate_count > 0:
-                percentage_of_selected = (selected_candidates_count / recruiter_candidate_count) * 100
-            else:
-                percentage_of_selected = 0.0
-
-            recruiter_data[recruiter_username] = {
-                'submission_counts_daily': submission_counts_daily,
-                'submission_counts_weekly': submission_counts_weekly,
-                'submission_counts_monthly': submission_counts_monthly,
-                'submission_counts_yearly': submission_counts_yearly,
-                'selected_candidates_count': selected_candidates_count,
-                'rejected_candidates_count': rejected_candidates_count,
-                'in_process_candidates_count': in_process_candidates_count,
-                'conversion_rate': conversion_rate,
-                'client_closure_rates': client_closure_rates,
-                'job_type_closure_rates': job_type_closure_rates,
-                'role_industry_location_analysis': role_industry_location_analysis,
-                'candidate_count': recruiter_candidate_count,
-                'percentage_of_selected': percentage_of_selected,
-                'candidates': []  # Initialize an empty list to store candidate details
-            }
-
-            for candidate in candidates:
-                recruiter_data[recruiter_username]['candidates'].append({
-                    'candidate_name': candidate.name,
-                    'job_id': candidate.job_id,
-                    'client': candidate.client,
-                    'recruiter': candidate.recruiter,
-                    'date_created': candidate.date_created.strftime('%Y-%m-%d') if candidate.date_created else None,
-                    'last_working_date': candidate.last_working_date.strftime('%Y-%m-%d') if candidate.last_working_date else None,
-                    'status': candidate.status
-                })
-        else:
-            recruiter_data[recruiter_username] = {
-                'submission_counts_daily': [],
-                'submission_counts_weekly': [],
-                'submission_counts_monthly': [],
-                'submission_counts_yearly': [],
-                'selected_candidates_count': 0,
-                'rejected_candidates_count': 0,
-                'in_process_candidates_count': 0,
-                'conversion_rate': 0.0,
-                'client_closure_rates': [],
-                'job_type_closure_rates': [],
-                'role_industry_location_analysis': [],
-                'candidate_count': 0,
-                'percentage_of_selected': 0.0,
-                'candidates': []  # Empty list for no candidates
-            }
-
-    # Calculate ranking based on selected candidates count
-    ranked_recruiters = sorted(recruiter_data.items(), key=lambda x: x[1]['selected_candidates_count'], reverse=True)
-    for rank, (recruiter, data) in enumerate(ranked_recruiters, start=1):
-        recruiter_data[recruiter]['ranking'] = rank
+        for candidate in candidates:
+            recruiter_data[recruiter_username]['candidates'].append({
+                'candidate_name': candidate.name,
+                'job_id': candidate.job_id,
+                'client': candidate.client,
+                'recruiter': candidate.recruiter,
+                'date_created': candidate.date_created.strftime('%Y-%m-%d %H:%M:%S') if candidate.date_created else None,
+                'last_working_date': candidate.last_working_date.strftime('%Y-%m-%d') if candidate.last_working_date else None,
+                'status': candidate.status
+            })
 
     percentage_ranking_response = {
         'status': 'success',
@@ -10203,7 +10165,19 @@ def analyze_recruitment():
         'bar_graph_data': generate_bar_graph_data(recruiter_data)
     }
 
-    return jsonify(percentage_ranking_response)
+    return jsonify(percentage_ranking_response), 200
+
+def generate_bar_graph_data(recruiter_data):
+    bar_graph_data = {
+        'recruiters': [],
+        'selected_candidates_counts': []
+    }
+
+    for recruiter, data in recruiter_data.items():
+        bar_graph_data['recruiters'].append(recruiter)
+        bar_graph_data['selected_candidates_counts'].append(data['selected_candidates_count'])
+
+    return bar_graph_data
 
 def get_submission_counts(candidates_query, from_date, to_date, interval):
     if interval == 'daily':
@@ -10301,17 +10275,6 @@ def get_role_industry_location_analysis(query, recruiter_username, from_date, to
         'count': item.count
     } for item in role_industry_location_analysis]
 
-def generate_bar_graph_data(recruiter_data):
-    bar_graph_data = {
-        'recruiters': [],
-        'selected_candidates_counts': []
-    }
-
-    for recruiter, data in recruiter_data.items():
-        bar_graph_data['recruiters'].append(recruiter)
-        bar_graph_data['selected_candidates_counts'].append(data['selected_candidates_count'])
-
-    return bar_graph_data
 
 # @app.route('/analyze_recruitment', methods=['POST'])
 # def analyze_recruitment():
