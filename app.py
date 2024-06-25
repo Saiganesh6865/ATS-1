@@ -10149,7 +10149,7 @@ def analyze_recruitment():
                 'job_id': candidate.job_id,
                 'client': candidate.client,
                 'recruiter': candidate.recruiter,
-                'date_created': candidate.date_created.strftime('%Y-%m-%d %H:%M:%S') if candidate.date_created else None,
+                'date_created': candidate.date_created.strftime('%Y-%m-%d') if candidate.date_created else None,
                 'last_working_date': candidate.last_working_date.strftime('%Y-%m-%d') if candidate.last_working_date else None,
                 'status': candidate.status
             })
