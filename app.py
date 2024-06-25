@@ -10127,8 +10127,8 @@ def analyze_recruitment():
             submission_counts_monthly = get_submission_counts(candidates_query, from_date, to_date, 'monthly')
             submission_counts_yearly = get_submission_counts(candidates_query, from_date, to_date, 'yearly')
 
-            rejected_candidates_count = candidates_query.filter(Candidate.status == 'REJECTED').count()
-            in_process_candidates_count = candidates_query.filter(Candidate.status.notin_(['SELECTED', 'REJECTED'])).count()
+            rejected_candidates_count = candidates_query.filter(Candidate.status == 'Rejected').count()
+            in_process_candidates_count = candidates_query.filter(Candidate.status.notin_(['Selected', 'Rejected'])).count()
 
             conversion_rate = get_conversion_rate(candidates_query)
             client_closure_rates = get_client_closure_rates(candidates_query)
@@ -10248,7 +10248,7 @@ def get_submission_counts(candidates_query, from_date, to_date, interval):
 def get_conversion_rate(query):
     total_submissions = query.count()
     if total_submissions > 0:
-        conversion_rate_query = query.filter(Candidate.status == 'SELECTED')
+        conversion_rate_query = query.filter(Candidate.status == 'Selected')
         successful_closures = conversion_rate_query.count()
         conversion_rate = successful_closures / total_submissions
     else:
@@ -10257,7 +10257,7 @@ def get_conversion_rate(query):
     return conversion_rate
 
 def get_client_closure_rates(query):
-    client_closure_rates = query.filter(Candidate.status == 'SELECTED').group_by(Candidate.client).with_entities(Candidate.client, func.count()).all()
+    client_closure_rates = query.filter(Candidate.status == 'Selected').group_by(Candidate.client).with_entities(Candidate.client, func.count()).all()
     return [{'client': item.client, 'count': item.count} for item in client_closure_rates]
 
 def get_job_type_closure_rates(query, recruiter_username, from_date, to_date):
@@ -10271,7 +10271,7 @@ def get_job_type_closure_rates(query, recruiter_username, from_date, to_date):
         Candidate.recruiter == recruiter_username,
         Candidate.date_created >= from_date,
         Candidate.date_created <= to_date,
-        Candidate.status == 'SELECTED'
+        Candidate.status == 'Selected'
     ).group_by(
         JobPost.job_type
     ).all()
@@ -10290,7 +10290,7 @@ def get_role_industry_location_analysis(query, recruiter_username, from_date, to
         Candidate.recruiter == recruiter_username,
         Candidate.date_created >= from_date,
         Candidate.date_created <= to_date,
-        Candidate.status == 'SELECTED'
+        Candidate.status == 'Selected'
     ).group_by(
         JobPost.role,
         JobPost.location
