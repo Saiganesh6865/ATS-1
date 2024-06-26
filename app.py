@@ -10128,10 +10128,10 @@ def analyze_recruitment():
         selected_candidates_count = candidates_query.filter(Candidate.status == 'ON-BOARDED').count()
         total_selected_candidates += selected_candidates_count
 
-        in_process_candidates_count = candidates_query.filter(Candidate.status.notin_(['ON-BOARDED', 'REJECTED'])).count()
+        in_process_candidates_count = candidates_query.filter(Candidate.status.notin_(['ON-BOARDED', 'SREEN REJECTED', 'L1-REJECTED', 'L2-REJECTED', 'L3-REJECTED', 'OFFER-DECLINED','OFFER-REJECTED', 'DUPLICATE', 'HOLD, DROP', 'CANDIDATE NO-SHOW'])).count()
         total_process_candidates += in_process_candidates_count
         
-        rejected_candidates_count = candidates_query.filter(Candidate.status == 'REJECTED').count()
+        rejected_candidates_count = candidates_query.filter(Candidate.status == 'SREEN REJECTED', 'L1-REJECTED', 'L2-REJECTED', 'L3-REJECTED', 'OFFER-DECLINED','OFFER-REJECTED', 'DUPLICATE', 'HOLD, DROP', 'CANDIDATE NO-SHOW').count()
         total_rejected_candidates_for_recruiter += rejected_candidates_count  # Accumulate rejected candidates count
         
         in_process_candidates = total_candidate_count - (selected_candidates_count + rejected_candidates_count )
