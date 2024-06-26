@@ -4729,9 +4729,9 @@ def update_candidate(candidate_id):
     candidate.comments = candidate_comment
 
     # Update data_updated_date and data_updated_time
-    # current_datetime = datetime.now(pytz.timezone('Asia/Kolkata'))
-    # candidate.data_updated_date = current_datetime.date()
-    # candidate.data_updated_time = current_datetime.time()
+    current_datetime = datetime.now(pytz.timezone('Asia/Kolkata'))
+    candidate.data_updated_date = current_datetime.date()
+    candidate.data_updated_time = current_datetime.time()
 
     db.session.commit()
 
@@ -10163,6 +10163,7 @@ def analyze_recruitment():
             'highest_closure_client': highest_closure_client,
             'lowest_closure_client': lowest_closure_client,
             'candidate_count': recruiter_candidate_count,
+            'total_candidate_count':
             'percentage_of_selected': percentage_of_selected,
             'candidates': [{
                 'candidate_name': candidate.name,
@@ -10262,9 +10263,11 @@ def get_role_industry_location_analysis(recruiter_username, from_date, to_date):
         )
     ).filter(
         Candidate.recruiter == recruiter_username,
-        Candidate.date_created >= from_date,
-        Candidate.date_created <= to_date,
-        ~Candidate.status.in_(['REJECTED', 'ON-BOARDED']),
+        # Candidate.date_created >= from_date,
+        # Candidate.date_created <= to_date,
+        ~Candidate.status.in_(['ON-BOARDED',
+                'SCREEN REJECTED', 'L1-REJECTED', 'L2-REJECTED', 'L3-REJECTED', 'OFFER-DECLINED', 
+                'OFFER-REJECTED', 'DUPLICATE', 'HOLD', 'DROP', 'CANDIDATE NO-SHOW']),
         JobPost.role.isnot(None)  # Ensure JobPost.role is not None (to filter out non-linked candidates)
     ).group_by(
         JobPost.role,
@@ -10293,9 +10296,11 @@ def get_role_industry_location_analysis(recruiter_username, from_date, to_date):
         Candidate.name
     ).filter(
         Candidate.recruiter == recruiter_username,
-        Candidate.date_created >= from_date,
-        Candidate.date_created <= to_date,
-        Candidate.status == 'REJECTED'
+        # Candidate.date_created >= from_date,
+        # Candidate.date_created <= to_date,
+        ~Candidate.status.in_(['ON-BOARDED',
+                'SCREEN REJECTED', 'L1-REJECTED', 'L2-REJECTED', 'L3-REJECTED', 'OFFER-DECLINED', 
+                'OFFER-REJECTED', 'DUPLICATE', 'HOLD', 'DROP', 'CANDIDATE NO-SHOW'])
     ).all()
 
     rejected_candidates_list = [{'id': candidate.id, 'name': candidate.name} for candidate in rejected_candidates]
@@ -10313,8 +10318,8 @@ def get_role_industry_location_analysis(recruiter_username, from_date, to_date):
         Candidate.job_id == JobPost.id
     ).filter(
         Candidate.recruiter == recruiter_username,
-        Candidate.date_created >= from_date,
-        Candidate.date_created <= to_date,
+        # Candidate.date_created >= from_date,
+        # Candidate.date_created <= to_date,
         Candidate.status == 'ON-BOARDED'
     ).all()
 
@@ -10343,6 +10348,102 @@ def get_role_industry_location_analysis(recruiter_username, from_date, to_date):
     }
 
     return result
+
+# def get_role_industry_location_analysis(recruiter_username, from_date, to_date):
+#     role_industry_location_analysis = db.session.query(
+#         JobPost.role,
+#         JobPost.location,
+#         JobPost.job_type,
+#         func.count(Candidate.id).label('count')
+#     ).join(
+#         Candidate,
+#         and_(
+#             Candidate.profile == JobPost.role,
+#             Candidate.job_id == JobPost.id  # Assuming job_id links Candidate to JobPost
+#         )
+#     ).filter(
+#         Candidate.recruiter == recruiter_username,
+#         Candidate.date_created >= from_date,
+#         Candidate.date_created <= to_date,
+#         ~Candidate.status.in_(['REJECTED', 'ON-BOARDED']),
+#         JobPost.role.isnot(None)  # Ensure JobPost.role is not None (to filter out non-linked candidates)
+#     ).group_by(
+#         JobPost.role,
+#         JobPost.location,
+#         JobPost.job_type
+#     ).all()
+
+#     remaining_candidates = [{
+#         'role': item.role,
+#         'location': item.location,
+#         'job_type': item.job_type,
+#         'count': item.count
+#     } for item in role_industry_location_analysis]
+
+#     # Additional query to count linked candidates per role
+#     linked_candidates_count = {}
+#     for role_info in remaining_candidates:
+#         role = role_info['role']
+#         count = role_info['count']
+#         linked_candidates_count[role] = count
+
+#     total_remaining_candidates = sum(item['count'] for item in remaining_candidates)
+
+#     rejected_candidates = db.session.query(
+#         Candidate.id,
+#         Candidate.name
+#     ).filter(
+#         Candidate.recruiter == recruiter_username,
+#         Candidate.date_created >= from_date,
+#         Candidate.date_created <= to_date,
+#         Candidate.status == 'REJECTED'
+#     ).all()
+
+#     rejected_candidates_list = [{'id': candidate.id, 'name': candidate.name} for candidate in rejected_candidates]
+#     total_rejected_candidates = len(rejected_candidates_list)
+
+#     on_boarded_candidates = db.session.query(
+#         Candidate.id,
+#         Candidate.name,
+#         Candidate.client,
+#         JobPost.role,
+#         JobPost.location,
+#         JobPost.job_type
+#     ).join(
+#         JobPost,
+#         Candidate.job_id == JobPost.id
+#     ).filter(
+#         Candidate.recruiter == recruiter_username,
+#         Candidate.date_created >= from_date,
+#         Candidate.date_created <= to_date,
+#         Candidate.status == 'ON-BOARDED'
+#     ).all()
+
+#     on_boarded_candidates_list = [{
+#         'candidate_id': candidate.id,
+#         'candidate_name': candidate.name,
+#         'client': candidate.client,
+#         'role': candidate.role,
+#         'location': candidate.location,
+#         'job_type': candidate.job_type
+#     } for candidate in on_boarded_candidates]
+
+#     total_on_boarded_candidates = len(on_boarded_candidates_list)
+
+#     on_boarded_percentage = (total_on_boarded_candidates / total_remaining_candidates) * 100 if total_remaining_candidates > 0 else 0
+
+#     result = {
+#         'remaining_candidates': remaining_candidates,
+#         'total_remaining_candidates': total_remaining_candidates,
+#         'linked_candidates_count': linked_candidates_count,  # Include linked candidates count here
+#         'rejected_candidates': rejected_candidates_list,
+#         'total_rejected_candidates': total_rejected_candidates,
+#         'on_boarded_candidates': on_boarded_candidates_list,
+#         'total_on_boarded_candidates': total_on_boarded_candidates,
+#         'on_boarded_percentage': on_boarded_percentage
+#     }
+
+#     return result
 
 
 def get_conversion_rate(query):
