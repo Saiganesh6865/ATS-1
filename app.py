@@ -10110,6 +10110,7 @@ def analyze_recruitment():
     total_selected_candidates = 0
     total_rejected_candidates_for_recruiter = 0
     total_process_candidates = 0
+    total_rejected_candidates = 0
 
     for recruiter_username in recruiter_usernames:
         candidates_query = db.session.query(Candidate).filter(
