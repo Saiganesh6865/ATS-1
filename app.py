@@ -10207,19 +10207,35 @@ def analyze_recruitment():
     #     recruiter_data[recruiter]['ranking'] = rank
     
     # Calculate ranking based on selected_candidates_count within the date range
-    ranked_recruiters = sorted(recruiter_data.items(), key=lambda x: x[1]['selected_candidates_count'], reverse=True)
-    rank = 1
-    previous_selected_count = float('inf')
+    # ranked_recruiters = sorted(recruiter_data.items(), key=lambda x: x[1]['selected_candidates_count'], reverse=True)
+    # rank = 1
+    # previous_selected_count = float('inf')
 
+    # for recruiter, data in ranked_recruiters:
+    #     current_selected_count = data['selected_candidates_count']
+    #     if current_selected_count < previous_selected_count:
+    #         rank += 1
+    #     if current_selected_count > 0:
+    #         recruiter_data[recruiter]['ranking'] = rank
+    #     else:
+    #         recruiter_data[recruiter]['ranking'] = 0
+    #     previous_selected_count = current_selected_count
+
+    # Calculate ranking based on the percentage of selected candidates within the date range
+    ranked_recruiters = sorted(recruiter_data.items(), key=lambda x: (x[1]['selected_candidates_count'] / x[1]['candidate_count'] if x[1]['candidate_count'] > 0 else 0), reverse=True)
+    
+    rank = 0
+    
     for recruiter, data in ranked_recruiters:
-        current_selected_count = data['selected_candidates_count']
-        if current_selected_count < previous_selected_count:
-            rank += 1
-        if current_selected_count > 0:
-            recruiter_data[recruiter]['ranking'] = rank
+        if data['candidate_count'] > 0:  # Ensure there are candidates within the date range
+            if data['selected_candidates_count'] > 0:
+                rank += 1
+                recruiter_data[recruiter]['ranking'] = rank
+            else:
+                recruiter_data[recruiter]['ranking'] = 0
         else:
             recruiter_data[recruiter]['ranking'] = 0
-        previous_selected_count = current_selected_count
+
 
 
     percentage_ranking_response = {
@@ -10337,7 +10353,7 @@ def get_job_type_closure_rates(query, recruiter_username, from_date, to_date):
         Candidate.recruiter == recruiter_username,
         Candidate.date_created >= from_date,
         Candidate.date_created <= to_date,
-        Candidate.status == 'SELECTED'
+        Candidate.status == 'ON-BOARDED'
     ).group_by(
         JobPost.job_type
     ).all()
