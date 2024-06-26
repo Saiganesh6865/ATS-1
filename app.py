@@ -10108,7 +10108,7 @@ def analyze_recruitment():
     recruiter_data = {}
     total_candidate_count = 0
     total_selected_candidates = 0
-    total_rejected_candidates = 0
+    total_rejected_candidates_for_recruiter = 0
     total_process_candidates = 0
 
     for recruiter_username in recruiter_usernames:
@@ -10125,6 +10125,11 @@ def analyze_recruitment():
         selected_candidates_count = candidates_query.filter(Candidate.status == 'SELECTED').count()
         total_selected_candidates += selected_candidates_count
 
+        in_process_candidates_count = candidates_query.filter(Candidate.status.notin_(['ON-BOARDED', 'REJECTED'])).count()
+        total_process_candidates += in_process_candidates_count
+        rejected_candidates_count = candidates_query.filter(Candidate.status == 'REJECTED').count()
+        total_rejected_candidates_for_recruiter += rejected_candidates_count  # Accumulate rejected candidates count
+        
         # Get role, industry, location analysis
         role_industry_location_analysis_result = get_role_industry_location_analysis(
             recruiter_username, from_date, to_date)
@@ -10148,8 +10153,8 @@ def analyze_recruitment():
             'submission_counts_monthly': get_submission_counts(candidates_query, from_date, to_date, 'monthly'),
             'submission_counts_yearly': get_submission_counts(candidates_query, from_date, to_date, 'yearly'),
             'selected_candidates_count': selected_candidates_count,
-            'rejected_candidates_count': total_rejected_candidates,
-            'in_process_candidates_count': total_remaining_candidates - selected_candidates_count - total_rejected_candidates,
+            'rejected_candidates_count': total_rejected_candidates_for_recruiter,
+            'in_process_candidates_count': total_process_candidates,
             'conversion_rate': conversion_rate,
             'client_closure_rates': client_closure_rates,
             'highest_closure_client': highest_closure_client,
