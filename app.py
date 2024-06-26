@@ -10163,7 +10163,6 @@ def analyze_recruitment():
             'highest_closure_client': highest_closure_client,
             'lowest_closure_client': lowest_closure_client,
             'candidate_count': recruiter_candidate_count,
-            'total_candidate_count':
             'percentage_of_selected': percentage_of_selected,
             'candidates': [{
                 'candidate_name': candidate.name,
