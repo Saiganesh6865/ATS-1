@@ -10193,6 +10193,7 @@ def analyze_recruitment():
 
     response_data = {
         'status': 'success',
+        'Job_Type_Analysis': analysis_result,
         'recruiter_data': recruiter_data,
         'total_candidate_count': total_candidate_count,
         'total_selected_candidates': total_selected_candidates,
@@ -10331,7 +10332,6 @@ def get_role_industry_location_analysis(recruiter_username, from_date, to_date):
     on_boarded_percentage = (total_on_boarded_candidates / total_remaining_candidates) * 100 if total_remaining_candidates > 0 else 0
 
     result = {
-        'Job_Type_Analysis': analysis_result,
         'remaining_candidates': remaining_candidates,
         'total_remaining_candidates': total_remaining_candidates,
         'linked_candidates_count': linked_candidates_count,  # Include linked candidates count here
