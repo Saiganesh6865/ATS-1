@@ -10082,7 +10082,7 @@ from datetime import datetime
 import io
 import base64
 
-@app.route('/analyze_recruitment', methods=['POST'])
+@app.route('/analyze_recruitment', methods=['POST','GET'])
 def analyze_recruitment():
     data = request.json
 
@@ -10211,6 +10211,10 @@ def analyze_recruitment():
     return jsonify(response_data)
 
 def get_time_to_close_analysis(recruiter_usernames):
+    # Ensure recruiter_usernames is a string if it's not already
+    if not isinstance(recruiter_usernames, str):
+        raise ValueError("Input recruiter_usernames should be a comma-separated string of recruiter usernames.")
+        
     recruiter_names = [name.strip() for name in recruiter_usernames.split(',')]
     result = []
 
