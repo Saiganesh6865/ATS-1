@@ -10146,7 +10146,8 @@ def analyze_recruitment():
 
         conversion_rate = get_conversion_rate(candidates_query)
         # analysis_result = get_role_industry_location_analysis(recruiter_username, from_date, to_date)
-        analysis_result = get_role_industry_location_analysis()
+        time_to_close_analysis = analysis_result = get_role_industry_location_analysis()
+        get_time_to_close_analysis(recruiter_names)
         client_closure_rates, highest_closure_client, lowest_closure_client, _, _ = get_client_closure_rates(candidates_query)
 
         percentage_of_selected = (selected_candidates_count / recruiter_candidate_count) * 100 if recruiter_candidate_count > 0 else 0.0
@@ -10194,6 +10195,7 @@ def analyze_recruitment():
 
     response_data = {
         'status': 'success',
+        'time_to_close_analysis':time_to_close_analysis,
         'Job_Type_Analysis': analysis_result,
         'recruiter_data': recruiter_data,
         'total_candidate_count': total_candidate_count,
@@ -10208,6 +10210,67 @@ def analyze_recruitment():
 
     return jsonify(response_data)
 
+def get_time_to_close_analysis(recruiter_names):
+    recruiter_names = [name.strip() for name in recruiter_names.split(',')]
+    result = []
+
+    for recruiter_name in recruiter_names:
+        # Query candidates for the recruiter where status is 'SCREENING'
+        screening_candidates = db.session.query(Candidate).filter(
+            Candidate.recruiter == recruiter_name,
+            Candidate.status == 'SCREENING'
+        ).all()
+
+        candidates_data = []
+        total_screening_candidates = 0
+        total_days_to_close = 0
+        count_of_onboarded_positions = 0
+
+        for candidate in screening_candidates:
+            total_screening_candidates += 1
+
+            # Check if the candidate eventually transitions to 'ON-BOARDED'
+            onboarded_candidate = db.session.query(Candidate).filter(
+                Candidate.id == candidate.id,
+                Candidate.status == 'ON-BOARDED'
+            ).first()
+
+            if onboarded_candidate and onboarded_candidate.date_created and onboarded_candidate.data_updated_date:
+                # Calculate days to close
+                days_to_close = (onboarded_candidate.data_updated_date - onboarded_candidate.date_created).days
+
+                # Prepare candidate data
+                candidate_data = {
+                    'candidate_name': onboarded_candidate.name,
+                    'job_id': onboarded_candidate.job_id,
+                    'client': onboarded_candidate.client,
+                    'recruiter': onboarded_candidate.recruiter,
+                    'date_created': onboarded_candidate.date_created.strftime('%Y-%m-%d'),
+                    'date_updated': onboarded_candidate.data_updated_date.strftime('%Y-%m-%d'),
+                    'days_to_close': days_to_close,
+                    'profile': onboarded_candidate.profile,
+                    'status': onboarded_candidate.status
+                }
+                candidates_data.append(candidate_data)
+                total_days_to_close += days_to_close
+                count_of_onboarded_positions += 1
+
+        # Calculate average days to close
+        average_days_to_close = (total_days_to_close / count_of_onboarded_positions) if count_of_onboarded_positions > 0 else 0
+
+        # Append summary and candidates data for the recruiter
+        recruiter_data = {
+            'recruiter_name': recruiter_name,
+            'candidates': candidates_data,
+            'total_days_to_close': total_days_to_close,
+            'count_of_screening_candidates': total_screening_candidates,
+            'count_of_onboarded_positions': count_of_onboarded_positions,
+            'average_days_to_close': average_days_to_close
+        }
+
+        result.append(recruiter_data)
+
+    return result
 
 def get_submission_counts(candidates_query, from_date, to_date, interval):
     if interval == 'daily':
