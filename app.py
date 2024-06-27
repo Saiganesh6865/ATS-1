@@ -10146,8 +10146,8 @@ def analyze_recruitment():
 
         conversion_rate = get_conversion_rate(candidates_query)
         # analysis_result = get_role_industry_location_analysis(recruiter_username, from_date, to_date)
-        time_to_close_analysis = analysis_result = get_role_industry_location_analysis()
-        get_time_to_close_analysis(recruiter_names)
+        analysis_result = get_role_industry_location_analysis()
+        time_to_close_analysis = get_time_to_close_analysis(recruiter_names)
         client_closure_rates, highest_closure_client, lowest_closure_client, _, _ = get_client_closure_rates(candidates_query)
 
         percentage_of_selected = (selected_candidates_count / recruiter_candidate_count) * 100 if recruiter_candidate_count > 0 else 0.0
