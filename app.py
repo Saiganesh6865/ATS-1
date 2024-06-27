@@ -10211,7 +10211,7 @@ def analyze_recruitment():
     return jsonify(response_data)
 
 def get_time_to_close_analysis(recruiter_usernames):
-    recruiter_names = [name.strip() for name in recruiter_names.split(',')]
+    recruiter_names = [name.strip() for name in recruiter_usernames.split(',')]
     result = []
 
     for recruiter_name in recruiter_names:
