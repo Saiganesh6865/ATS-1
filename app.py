@@ -10235,7 +10235,7 @@ def get_time_to_close_analysis(recruiter_usernames):
                 Candidate.id == candidate.id,
                 Candidate.recruiter == recruiter_name,
                 Candidate.status == 'ON-BOARDED'
-            ).all()
+            ).first()
 
             if onboarded_candidate and onboarded_candidate.date_created and onboarded_candidate.data_updated_date:
                 # Calculate days to close
