@@ -10286,8 +10286,8 @@ def get_submission_counts(candidates_query, from_date, to_date, interval):
         grouped_query = candidates_query.filter(
             Candidate.date_created >= from_date,
             Candidate.date_created <= to_date
-        ).group_by(func.TO_CHAR(Candidate.date_created, 'IYYY-IW')).with_entities(
-            func.TO_CHAR(Candidate.date_created, 'IYYY-IW').label('date_part'),
+        ).group_by(func.DATE(Candidate.date_created)).with_entities(
+            func.DATE(Candidate.date_created).label('date_part'),
             func.count().label('count')
         )
     elif interval == 'monthly':
