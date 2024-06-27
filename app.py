@@ -10210,6 +10210,7 @@ def analyze_recruitment():
 
     return jsonify(response_data)
 
+
 def get_time_to_close_analysis(recruiter_usernames):
     result = []
 
@@ -10253,6 +10254,13 @@ def get_time_to_close_analysis(recruiter_usernames):
         # Calculate average days to close
         average_days_to_close = (total_days_to_close / count_of_onboarded_positions) if count_of_onboarded_positions > 0 else 0
 
+        # Calculate percentage of onboarded candidates
+        total_candidates = len(candidates)
+        if total_candidates > 0:
+            percentage_onboarded = (count_of_onboarded_positions / total_candidates) * 100
+        else:
+            percentage_onboarded = 0
+
         # Append summary and candidates data for the recruiter
         recruiter_data = {
             'recruiter_name': recruiter_name,
@@ -10260,12 +10268,76 @@ def get_time_to_close_analysis(recruiter_usernames):
             'total_days_to_close': total_days_to_close,
             'count_of_screening_candidates': total_screening_candidates,
             'count_of_onboarded_positions': count_of_onboarded_positions,
-            'average_days_to_close': average_days_to_close
+            'average_days_to_close': average_days_to_close,
+            'percentage_onboarded': percentage_onboarded,
+            'total_candidates_count': total_candidates
         }
 
         result.append(recruiter_data)
 
+    # Calculate ranking based on count of onboarded positions (highest count gets higher rank)
+    result.sort(key=lambda x: x['count_of_onboarded_positions'], reverse=True)  # Sort by count_of_onboarded_positions descending
+    for i, recruiter_data in enumerate(result, start=1):
+        recruiter_data['ranking'] = i
+
     return result
+
+# def get_time_to_close_analysis(recruiter_usernames):
+#     result = []
+
+#     for recruiter_name in recruiter_usernames:
+#         # Query candidates for the recruiter where status is 'SCREENING' or 'ON-BOARDED'
+#         candidates = db.session.query(Candidate).filter(
+#             Candidate.recruiter == recruiter_name,
+#             Candidate.status.in_(['SCREENING', 'ON-BOARDED'])
+#         ).all()
+
+#         candidates_data = []
+#         total_screening_candidates = 0
+#         total_days_to_close = 0
+#         count_of_onboarded_positions = 0
+
+#         for candidate in candidates:
+#             if candidate.status == 'SCREENING':
+#                 total_screening_candidates += 1
+#             elif candidate.status == 'ON-BOARDED':
+#                 count_of_onboarded_positions += 1
+
+#                 # Calculate days to close
+#                 if candidate.date_created and candidate.data_updated_date:
+#                     days_to_close = (candidate.data_updated_date - candidate.date_created).days
+#                     total_days_to_close += days_to_close
+
+#                 # Prepare candidate data
+#                 candidate_data = {
+#                     'candidate_name': candidate.name,
+#                     'job_id': candidate.job_id,  # Assuming job_id is a regular column
+#                     'client': candidate.client,
+#                     'recruiter': candidate.recruiter,
+#                     'date_created': candidate.date_created.strftime('%Y-%m-%d') if candidate.date_created else None,
+#                     'date_updated': candidate.data_updated_date.strftime('%Y-%m-%d') if candidate.data_updated_date else None,
+#                     'days_to_close': days_to_close if candidate.status == 'ON-BOARDED' else None,
+#                     'profile': candidate.profile,
+#                     'status': candidate.status
+#                 }
+#                 candidates_data.append(candidate_data)
+
+#         # Calculate average days to close
+#         average_days_to_close = (total_days_to_close / count_of_onboarded_positions) if count_of_onboarded_positions > 0 else 0
+
+#         # Append summary and candidates data for the recruiter
+#         recruiter_data = {
+#             'recruiter_name': recruiter_name,
+#             'candidates': candidates_data,
+#             'total_days_to_close': total_days_to_close,
+#             'count_of_screening_candidates': total_screening_candidates,
+#             'count_of_onboarded_positions': count_of_onboarded_positions,
+#             'average_days_to_close': average_days_to_close
+#         }
+
+#         result.append(recruiter_data)
+
+#     return result
 
 
 
