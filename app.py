@@ -10248,20 +10248,26 @@ def get_submission_counts(candidates_query, from_date, to_date, interval):
     submission_counts = grouped_query.all()
     return [{'date_part': str(item.date_part), 'count': item.count} for item in submission_counts]
 
-
 def get_role_industry_location_analysis():
-    # Query to get count of selected candidates by role, location, job type, and client
+    # Get all distinct roles from JobPost table
+    roles = db.session.query(
+        JobPost.role,
+        JobPost.location,
+        JobPost.job_type,
+        JobPost.client
+    ).distinct().all()
+
+    # Query to get count of all candidates by role, location, job type, and client
     role_industry_location_analysis = db.session.query(
         JobPost.role,
         JobPost.location,
         JobPost.job_type,
         JobPost.client,
-        func.count(Candidate.id).label('selected_count')
+        func.count(Candidate.id).label('total_count')
     ).join(
         Candidate,
         Candidate.job_id == JobPost.id  # Assuming job_id links Candidate to JobPost
     ).filter(
-        # Candidate.status == 'SELECTED',
         JobPost.role.isnot(None)  # Ensure JobPost.role is not None (to filter out non-linked candidates)
     ).group_by(
         JobPost.role,
@@ -10292,24 +10298,87 @@ def get_role_industry_location_analysis():
     # Combine results
     result = []
     on_boarded_dict = {(item.role, item.location, item.job_type, item.client): item.on_boarded_count for item in on_boarded_candidates_analysis}
+    total_dict = {(item.role, item.location, item.job_type, item.client): item.total_count for item in role_industry_location_analysis}
 
-    for item in role_industry_location_analysis:
-        key = (item.role, item.location, item.job_type, item.client)
-        selected_count = item.selected_count
+    for role, location, job_type, client in roles:
+        key = (role, location, job_type, client)
+        total_count = total_dict.get(key, 0)
         on_boarded_count = on_boarded_dict.get(key, 0)
-        on_boarded_percentage = (on_boarded_count / selected_count) * 100 if selected_count > 0 else 0
+        on_boarded_percentage = (on_boarded_count / total_count) * 100 if total_count > 0 else 0
 
         result.append({
-            'role': item.role,
-            'location': item.location,
-            'job_type': item.job_type,
-            'client': item.client,
-            'selected_count': selected_count,
+            'role': role,
+            'location': location,
+            'job_type': job_type,
+            'client': client,
+            'total_count': total_count,
             'on_boarded_count': on_boarded_count,
             'on_boarded_percentage': on_boarded_percentage
         })
 
     return result
+
+# def get_role_industry_location_analysis():
+#     # Query to get count of selected candidates by role, location, job type, and client
+#     role_industry_location_analysis = db.session.query(
+#         JobPost.role,
+#         JobPost.location,
+#         JobPost.job_type,
+#         JobPost.client,
+#         func.count(Candidate.id).label('selected_count')
+#     ).join(
+#         Candidate,
+#         Candidate.job_id == JobPost.id  # Assuming job_id links Candidate to JobPost
+#     ).filter(
+#         # Candidate.status == 'SELECTED',
+#         JobPost.role.isnot(None)  # Ensure JobPost.role is not None (to filter out non-linked candidates)
+#     ).group_by(
+#         JobPost.role,
+#         JobPost.location,
+#         JobPost.job_type,
+#         JobPost.client
+#     ).all()
+
+#     # Query to get the count of on-boarded candidates by role, location, job type, and client
+#     on_boarded_candidates_analysis = db.session.query(
+#         JobPost.role,
+#         JobPost.location,
+#         JobPost.job_type,
+#         JobPost.client,
+#         func.count(Candidate.id).label('on_boarded_count')
+#     ).join(
+#         Candidate,
+#         Candidate.job_id == JobPost.id
+#     ).filter(
+#         Candidate.status == 'ON-BOARDED'
+#     ).group_by(
+#         JobPost.role,
+#         JobPost.location,
+#         JobPost.job_type,
+#         JobPost.client
+#     ).all()
+
+#     # Combine results
+#     result = []
+#     on_boarded_dict = {(item.role, item.location, item.job_type, item.client): item.on_boarded_count for item in on_boarded_candidates_analysis}
+
+#     for item in role_industry_location_analysis:
+#         key = (item.role, item.location, item.job_type, item.client)
+#         selected_count = item.selected_count
+#         on_boarded_count = on_boarded_dict.get(key, 0)
+#         on_boarded_percentage = (on_boarded_count / selected_count) * 100 if selected_count > 0 else 0
+
+#         result.append({
+#             'role': item.role,
+#             'location': item.location,
+#             'job_type': item.job_type,
+#             'client': item.client,
+#             'selected_count': selected_count,
+#             'on_boarded_count': on_boarded_count,
+#             'on_boarded_percentage': on_boarded_percentage
+#         })
+
+#     return result
 
 # def get_role_industry_location_analysis(recruiter_username, from_date, to_date):
 #     role_industry_location_analysis = db.session.query(
