@@ -10233,8 +10233,9 @@ def get_time_to_close_analysis(recruiter_usernames):
             # Check if the candidate eventually transitions to 'ON-BOARDED'
             onboarded_candidate = db.session.query(Candidate).filter(
                 Candidate.id == candidate.id,
+                Candidate.recruiter == recruiter_name,
                 Candidate.status == 'ON-BOARDED'
-            ).first()
+            ).all()
 
             if onboarded_candidate and onboarded_candidate.date_created and onboarded_candidate.data_updated_date:
                 # Calculate days to close
