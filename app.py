@@ -10211,14 +10211,11 @@ def analyze_recruitment():
     return jsonify(response_data)
 
 def get_time_to_close_analysis(recruiter_usernames):
-    # Ensure recruiter_usernames is a string if it's not already
-    if not isinstance(recruiter_usernames, str):
-        raise ValueError("Input recruiter_usernames should be a comma-separated string of recruiter usernames.")
-        
-    recruiter_names = [name.strip() for name in recruiter_usernames.split(',')]
-    result = []
+    # data=request.json
+    # recruiter_usernames = data.get('recruiter_usernames', [])
+    # result = []
 
-    for recruiter_name in recruiter_names:
+    for recruiter_name in recruiter_usernames:
         # Query candidates for the recruiter where status is 'SCREENING'
         screening_candidates = db.session.query(Candidate).filter(
             Candidate.recruiter == recruiter_name,
