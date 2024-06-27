@@ -10213,7 +10213,7 @@ def analyze_recruitment():
 def get_time_to_close_analysis(recruiter_usernames):
     # data=request.json
     # recruiter_usernames = data.get('recruiter_usernames', [])
-    # result = []
+    result = []
 
     for recruiter_name in recruiter_usernames:
         # Query candidates for the recruiter where status is 'SCREENING'
