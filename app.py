@@ -10147,7 +10147,7 @@ def analyze_recruitment():
         conversion_rate = get_conversion_rate(candidates_query)
         # analysis_result = get_role_industry_location_analysis(recruiter_username, from_date, to_date)
         analysis_result = get_role_industry_location_analysis()
-        time_to_close_analysis = get_time_to_close_analysis(recruiter_names)
+        time_to_close_analysis = get_time_to_close_analysis(recruiter_usernames)
         client_closure_rates, highest_closure_client, lowest_closure_client, _, _ = get_client_closure_rates(candidates_query)
 
         percentage_of_selected = (selected_candidates_count / recruiter_candidate_count) * 100 if recruiter_candidate_count > 0 else 0.0
@@ -10210,7 +10210,7 @@ def analyze_recruitment():
 
     return jsonify(response_data)
 
-def get_time_to_close_analysis(recruiter_names):
+def get_time_to_close_analysis(recruiter_usernames):
     recruiter_names = [name.strip() for name in recruiter_names.split(',')]
     result = []
 
