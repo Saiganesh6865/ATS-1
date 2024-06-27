@@ -10261,7 +10261,7 @@ def get_role_industry_location_analysis():
         Candidate,
         Candidate.job_id == JobPost.id  # Assuming job_id links Candidate to JobPost
     ).filter(
-        Candidate.status == 'SELECTED',
+        # Candidate.status == 'SELECTED',
         JobPost.role.isnot(None)  # Ensure JobPost.role is not None (to filter out non-linked candidates)
     ).group_by(
         JobPost.role,
