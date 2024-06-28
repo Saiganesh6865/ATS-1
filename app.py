@@ -10148,7 +10148,7 @@ def analyze_recruitment():
         conversion_rate = get_conversion_rate(candidates_query)
         # analysis_result = get_role_industry_location_analysis(recruiter_username, from_date, to_date)
         analysis_result = get_role_industry_location_analysis()
-        time_to_close_analysis = get_time_to_close_analysis(recruiter_usernames)
+        # time_to_close_analysis = get_time_to_close_analysis(recruiter_usernames)
         historical_performance_analysis = calculate_historical_performance_analysis(recruiter_usernames, from_date, to_date)
         client_closure_rates, highest_closure_client, lowest_closure_client, _, _ = get_client_closure_rates(candidates_query)
 
@@ -10197,7 +10197,7 @@ def analyze_recruitment():
 
     response_data = {
         'status': 'success',
-        'time_to_close_analysis':time_to_close_analysis,
+        # 'time_to_close_analysis':time_to_close_analysis,
         'historical_performance_analysis':historical_performance_analysis,
         'Job_Type_Analysis': analysis_result,
         'recruiter_data': recruiter_data,
@@ -10327,84 +10327,84 @@ def calculate_historical_performance_analysis(recruiter_usernames, from_date_str
     return result
 
 
-def get_time_to_close_analysis(recruiter_usernames):
-    result = {}
+# def get_time_to_close_analysis(recruiter_usernames):
+#     result = {}
 
-    for recruiter_name in recruiter_usernames:
-        # Query candidates for the recruiter
-        candidates = db.session.query(Candidate).filter(
-            Candidate.recruiter == recruiter_name,
-            Candidate.status.in_(['SCREENING', 'ON-BOARDED', 'SCREEN REJECTED', 'L1 REJECTED', 'L2 REJECTED', 'L3 REJECTED', 'OFFER DECLINED/REJECTED', 'DUPLICATE', 'HOLD', 'DROP', 'CANDIDATE NO SHOW'])
-        ).all()
+#     for recruiter_name in recruiter_usernames:
+#         # Query candidates for the recruiter
+#         candidates = db.session.query(Candidate).filter(
+#             Candidate.recruiter == recruiter_name,
+#             Candidate.status.in_(['SCREENING', 'ON-BOARDED', 'SCREEN REJECTED', 'L1 REJECTED', 'L2 REJECTED', 'L3 REJECTED', 'OFFER DECLINED/REJECTED', 'DUPLICATE', 'HOLD', 'DROP', 'CANDIDATE NO SHOW'])
+#         ).all()
 
-        candidates_data = []
-        total_screening_candidates = 0
-        total_days_to_close = 0
-        count_of_onboarded_positions = 0
-        total_candidates = len(candidates)
-        unsuccessful_closures = 0
+#         candidates_data = []
+#         total_screening_candidates = 0
+#         total_days_to_close = 0
+#         count_of_onboarded_positions = 0
+#         total_candidates = len(candidates)
+#         unsuccessful_closures = 0
 
-        for candidate in candidates:
-            if candidate.status == 'SCREENING':
-                total_screening_candidates += 1
-            elif candidate.status == 'ON-BOARDED':
-                count_of_onboarded_positions += 1
+#         for candidate in candidates:
+#             if candidate.status == 'SCREENING':
+#                 total_screening_candidates += 1
+#             elif candidate.status == 'ON-BOARDED':
+#                 count_of_onboarded_positions += 1
 
-                # Calculate days to close
-                if candidate.date_created and candidate.data_updated_date:
-                    days_to_close = (candidate.data_updated_date - candidate.date_created).days
-                    total_days_to_close += days_to_close
+#                 # Calculate days to close
+#                 if candidate.date_created and candidate.data_updated_date:
+#                     days_to_close = (candidate.data_updated_date - candidate.date_created).days
+#                     total_days_to_close += days_to_close
 
-                # Prepare candidate data
-                candidate_data = {
-                    'candidate_name': candidate.name,
-                    'job_id': candidate.job_id,  # Assuming job_id is a regular column
-                    'client': candidate.client,
-                    'recruiter': candidate.recruiter,
-                    'date_created': candidate.date_created.strftime('%Y-%m-%d') if candidate.date_created else None,
-                    'date_updated': candidate.data_updated_date.strftime('%Y-%m-%d') if candidate.data_updated_date else None,
-                    'days_to_close': days_to_close if candidate.status == 'ON-BOARDED' else None,
-                    'profile': candidate.profile,
-                    'status': candidate.status
-                }
-                candidates_data.append(candidate_data)
-            elif candidate.status in ['SCREEN REJECTED', 'L1 REJECTED', 'L2 REJECTED', 'L3 REJECTED', 'OFFER DECLINED/REJECTED', 'DUPLICATE', 'HOLD', 'DROP', 'CANDIDATE NO SHOW']:
-                unsuccessful_closures += 1
+#                 # Prepare candidate data
+#                 candidate_data = {
+#                     'candidate_name': candidate.name,
+#                     'job_id': candidate.job_id,  # Assuming job_id is a regular column
+#                     'client': candidate.client,
+#                     'recruiter': candidate.recruiter,
+#                     'date_created': candidate.date_created.strftime('%Y-%m-%d') if candidate.date_created else None,
+#                     'date_updated': candidate.data_updated_date.strftime('%Y-%m-%d') if candidate.data_updated_date else None,
+#                     'days_to_close': days_to_close if candidate.status == 'ON-BOARDED' else None,
+#                     'profile': candidate.profile,
+#                     'status': candidate.status
+#                 }
+#                 candidates_data.append(candidate_data)
+#             elif candidate.status in ['SCREEN REJECTED', 'L1 REJECTED', 'L2 REJECTED', 'L3 REJECTED', 'OFFER DECLINED/REJECTED', 'DUPLICATE', 'HOLD', 'DROP', 'CANDIDATE NO SHOW']:
+#                 unsuccessful_closures += 1
 
-        # Calculate average days to close
-        average_days_to_close = (total_days_to_close / count_of_onboarded_positions) if count_of_onboarded_positions > 0 else 0
+#         # Calculate average days to close
+#         average_days_to_close = (total_days_to_close / count_of_onboarded_positions) if count_of_onboarded_positions > 0 else 0
 
-        # Calculate percentage of onboarded candidates
-        percentage_onboarded = (count_of_onboarded_positions / total_candidates) * 100 if total_candidates > 0 else 0
+#         # Calculate percentage of onboarded candidates
+#         percentage_onboarded = (count_of_onboarded_positions / total_candidates) * 100 if total_candidates > 0 else 0
 
-        # Append summary and candidates data for the recruiter
-        recruiter_data = {
-            'recruiter_name': recruiter_name,
-            'candidates': candidates_data,
-            'total_days_to_close': total_days_to_close,
-            'count_of_screening_candidates': total_screening_candidates,
-            'count_of_onboarded_positions': count_of_onboarded_positions,
-            'unsuccessful_closures': unsuccessful_closures,
-            'average_days_to_close': average_days_to_close,
-            'percentage_onboarded': percentage_onboarded,
-            'total_candidates_count': total_candidates
-        }
+#         # Append summary and candidates data for the recruiter
+#         recruiter_data = {
+#             'recruiter_name': recruiter_name,
+#             'candidates': candidates_data,
+#             'total_days_to_close': total_days_to_close,
+#             'count_of_screening_candidates': total_screening_candidates,
+#             'count_of_onboarded_positions': count_of_onboarded_positions,
+#             'unsuccessful_closures': unsuccessful_closures,
+#             'average_days_to_close': average_days_to_close,
+#             'percentage_onboarded': percentage_onboarded,
+#             'total_candidates_count': total_candidates
+#         }
 
-        result[recruiter_name] = recruiter_data
+#         result[recruiter_name] = recruiter_data
 
-    # Sort recruiters by percentage of onboarded candidates
-    ranked_recruiters = sorted(result.values(), key=lambda x: x['percentage_onboarded'], reverse=True)
+#     # Sort recruiters by percentage of onboarded candidates
+#     ranked_recruiters = sorted(result.values(), key=lambda x: x['percentage_onboarded'], reverse=True)
 
-    # Assign rankings
-    rank = 0
-    for data in ranked_recruiters:
-        rank += 1
-        if data['count_of_onboarded_positions'] > 0:
-            data['ranking'] = rank
-        else:
-            data['ranking'] = 0
+#     # Assign rankings
+#     rank = 0
+#     for data in ranked_recruiters:
+#         rank += 1
+#         if data['count_of_onboarded_positions'] > 0:
+#             data['ranking'] = rank
+#         else:
+#             data['ranking'] = 0
 
-    return ranked_recruiters
+#     return ranked_recruiters
 
 # def get_time_to_close_analysis(recruiter_usernames):
 #     result = {}
