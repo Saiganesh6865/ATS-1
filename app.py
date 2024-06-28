@@ -11340,7 +11340,8 @@ def get_time_to_close_analysis():
         result[recruiter_name] = recruiter_data
 
     # Sort recruiters by percentage of onboarded candidates
-    ranked_recruiters = sorted(result.values(), key=lambda x: x['percentage_onboarded'], reverse=True)
+    # ranked_recruiters = sorted(result.values(), key=lambda x: x['percentage_onboarded'], reverse=True)
+    ranked_recruiters = sorted(result.values(), key=lambda x: x['average_days_to_close'], reverse=True)
 
     # Assign rankings
     rank = 0
