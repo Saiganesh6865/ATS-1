@@ -10236,7 +10236,7 @@ def calculate_historical_performance_analysis(recruiter_usernames, from_date_str
             end_date = start_date + relativedelta(months=1) - relativedelta(days=1)
 
             # Query candidates for the recruiter within the current month (mockup query)
-            candidates = db.query(Candidate).filter(
+            candidates = db.session.query(Candidate).filter(
                 Candidate.recruiter == recruiter_name,
                 Candidate.date_created >= start_date,
                 Candidate.date_created <= end_date,
