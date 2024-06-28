@@ -10148,6 +10148,7 @@ def analyze_recruitment():
         # analysis_result = get_role_industry_location_analysis(recruiter_username, from_date, to_date)
         analysis_result = get_role_industry_location_analysis()
         time_to_close_analysis = get_time_to_close_analysis(recruiter_usernames)
+        historical_performance_analysis = calculate_historical_performance_analysis(recruiter_usernames, from_date, to_date)
         client_closure_rates, highest_closure_client, lowest_closure_client, _, _ = get_client_closure_rates(candidates_query)
 
         percentage_of_selected = (selected_candidates_count / recruiter_candidate_count) * 100 if recruiter_candidate_count > 0 else 0.0
@@ -10196,6 +10197,7 @@ def analyze_recruitment():
     response_data = {
         'status': 'success',
         'time_to_close_analysis':time_to_close_analysis,
+        'historical_performance_analysis':historical_performance_analysis,
         'Job_Type_Analysis': analysis_result,
         'recruiter_data': recruiter_data,
         'total_candidate_count': total_candidate_count,
@@ -10209,6 +10211,120 @@ def analyze_recruitment():
     }
 
     return jsonify(response_data)
+
+
+def calculate_historical_performance_analysis(recruiter_usernames, from_date_str, to_date_str):
+    try:
+        from_date = datetime.strptime(from_date_str, "%Y-%m-%d")
+        to_date = datetime.strptime(to_date_str, "%Y-%m-%d")
+    except ValueError:
+        return {'status': 'error', 'message': 'Invalid date format. Please use YYYY-MM-DD format.'}
+
+    result = {}
+
+    for recruiter_name in recruiter_usernames:
+        # Initialize data structures
+        monthly_data = {}
+        total_months = (to_date.year - from_date.year) * 12 + (to_date.month - from_date.month) + 1
+
+        for i in range(total_months):
+            # Calculate start and end of current month
+            start_date = from_date + relativedelta(months=i)
+            end_date = start_date + relativedelta(months=1) - relativedelta(days=1)
+
+            # Query candidates for the recruiter within the current month
+            candidates = db.session.query(Candidate).filter(
+                Candidate.recruiter == recruiter_name,
+                Candidate.date_created >= start_date,
+                Candidate.date_created <= end_date,
+                Candidate.status.in_(['SCREENING', 'ON-BOARDED', 'SCREEN REJECTED', 'L1 REJECTED', 'L2 REJECTED', 'L3 REJECTED', 'OFFER DECLINED/REJECTED', 'DUPLICATE', 'HOLD', 'DROP', 'CANDIDATE NO SHOW'])
+            ).all()
+
+            candidates_data = []
+            total_screening_candidates = 0
+            total_days_to_close = 0
+            count_of_onboarded_positions = 0
+            total_candidates = len(candidates)
+            unsuccessful_closures = 0
+
+            for candidate in candidates:
+                if candidate.status == 'SCREENING':
+                    total_screening_candidates += 1
+                elif candidate.status == 'ON-BOARDED':
+                    count_of_onboarded_positions += 1
+
+                    # Calculate days to close
+                    if candidate.date_created and candidate.data_updated_date:
+                        days_to_close = (candidate.data_updated_date - candidate.date_created).days
+                        total_days_to_close += days_to_close
+
+                    # Prepare candidate data
+                    candidate_data = {
+                        'candidate_name': candidate.name,
+                        'job_id': candidate.job_id,  # Assuming job_id is a regular column
+                        'client': candidate.client,
+                        'recruiter': candidate.recruiter,
+                        'date_created': candidate.date_created.strftime('%Y-%m-%d') if candidate.date_created else None,
+                        'date_updated': candidate.data_updated_date.strftime('%Y-%m-%d') if candidate.data_updated_date else None,
+                        'days_to_close': days_to_close if candidate.status == 'ON-BOARDED' else None,
+                        'profile': candidate.profile,
+                        'status': candidate.status
+                    }
+                    candidates_data.append(candidate_data)
+                elif candidate.status in ['SCREEN REJECTED', 'L1 REJECTED', 'L2 REJECTED', 'L3 REJECTED', 'OFFER DECLINED/REJECTED', 'DUPLICATE', 'HOLD', 'DROP', 'CANDIDATE NO SHOW']:
+                    unsuccessful_closures += 1
+
+            # Calculate average days to close
+            average_days_to_close = (total_days_to_close / count_of_onboarded_positions) if count_of_onboarded_positions > 0 else 0
+
+            # Calculate percentage of onboarded candidates
+            percentage_onboarded = (count_of_onboarded_positions / total_candidates) * 100 if total_candidates > 0 else 0
+
+            # Store monthly data
+            monthly_data[start_date.strftime('%Y-%m')] = {
+                'candidates': candidates_data,
+                'total_days_to_close': total_days_to_close,
+                'count_of_screening_candidates': total_screening_candidates,
+                'count_of_onboarded_positions': count_of_onboarded_positions,
+                'unsuccessful_closures': unsuccessful_closures,
+                'average_days_to_close': average_days_to_close,
+                'percentage_onboarded': percentage_onboarded,
+                'total_candidates_count': total_candidates
+            }
+
+        # Evaluate trend in closure rates
+        first_month_data = next(iter(monthly_data.values()), None)
+        last_month_data = next(iter(list(monthly_data.values())[::-1]), None)  # Convert dict_values to list and then reverse
+
+        if first_month_data and last_month_data:
+            initial_onboarded_percentage = first_month_data.get('percentage_onboarded', 0)
+            final_onboarded_percentage = last_month_data.get('percentage_onboarded', 0)
+
+            if final_onboarded_percentage > initial_onboarded_percentage:
+                trend = 'improving'
+            elif final_onboarded_percentage < initial_onboarded_percentage:
+                trend = 'declining'
+            else:
+                trend = 'stable'
+
+            result[recruiter_name] = {
+                'monthly_data': monthly_data,
+                'overall_summary': {
+                    'total_months_analyzed': total_months,
+                    'trend_in_closure_rates': trend
+                }
+            }
+        else:
+            result[recruiter_name] = {
+                'monthly_data': monthly_data,
+                'overall_summary': {
+                    'total_months_analyzed': total_months,
+                    'trend_in_closure_rates': 'insufficient data'  # Or handle as appropriate
+                }
+            }
+
+    return result
+
 
 def get_time_to_close_analysis(recruiter_usernames):
     result = {}
