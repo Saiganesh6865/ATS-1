@@ -57,7 +57,8 @@ tzdata==2023.3
 
 Werkzeug==2.3.6
 
-gunicorn
+gunicorn==21.2.0
+
 
 python-magic
 
